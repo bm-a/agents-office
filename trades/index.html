@@ -253,6 +253,15 @@ const px = n => '₹' + Number(n).toLocaleString('en-IN',{minimumFractionDigits:
 const pct = n => (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(2) + '%';
 const dstr = iso => { const d = new Date(iso + 'T00:00:00'); return isNaN(d) ? iso : d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}); };
 const ago = ts => { const s = Math.max(0, (Date.now() - ts) / 1000); if (s < 60) return Math.floor(s) + 's ago'; if (s < 3600) return Math.floor(s/60) + 'm ago'; return Math.floor(s/3600) + 'h ago'; };
+/* Groww delivery sell-side charges estimate, calibrated to the SOTL actuals
+   (₹5 brokerage + 0.1% STT + ₹14.75 DP + exchange/SEBI + 18% GST). */
+const estSellCharges = (qty, price) => {
+  const turnover = qty * price;
+  const brokerage = 5, stt = 0.001 * turnover, dp = 14.75;
+  const exch = 0.0000297 * turnover, sebi = 10 * turnover / 1e7;
+  const gst = 0.18 * (brokerage + exch + sebi);
+  return brokerage + stt + dp + exch + sebi + gst;
+};
 
 let D = null, QUOTES = {}, NAVS = {}, prevPx = {}, lastQ = 0, lastTape = '';
 const qmap = s => QUOTES[s.yahoo];
@@ -276,6 +285,8 @@ function openCard(t){
   const stopPx = t.buy_price * (1 + t.stop_pct / 100);
   const stopDist = live != null ? (live - stopPx) / live * 100 : null;
   const dayPnl = q && q.change != null ? q.change * t.qty : null;
+  const estSell = live != null ? estSellCharges(t.qty, live) : null;
+  const netUpl = upl != null && estSell != null ? upl - (t.buy_charges || 0) - estSell : null;
   return `<article class="trade" data-sym="${esc(t.symbol)}">
     <div class="trade-head">
       <div><div class="sym">${esc(t.symbol)}</div><div class="co">${esc(t.company)}</div>
@@ -285,6 +296,8 @@ function openCard(t){
     </div>
     <div class="rows">
       <div class="row total"><span class="lab"><b>Unrealised P&amp;L</b></span><span class="val num ${cls(upl)}">${upl != null ? glyph(upl) + ' ' + sgn(upl) + ' (' + pct(uplPct) + ')' : '—'}</span></div>
+      <div class="row"><span class="lab">Est. sell charges</span><span class="val num">${estSell != null ? '≈ ' + inr(estSell) : '—'}</span></div>
+      <div class="row total"><span class="lab"><b>Net if sold now</b></span><span class="val num ${cls(netUpl)}">${netUpl != null ? glyph(netUpl) + ' ' + sgn(netUpl) : '—'}</span></div>
       <div class="row"><span class="lab">Today's move</span><span class="val num ${cls(dayPnl)}">${dayPnl != null ? glyph(dayPnl) + ' ' + sgn(dayPnl) : '—'}</span></div>
       <div class="row"><span class="lab">Day range</span><span class="val num">${q && q.day_low != null ? px(q.day_low) + ' – ' + px(q.day_high) : '—'}</span></div>
       <div class="row"><span class="lab">Stop ${t.stop_pct}% → ${px(stopPx)}</span><span class="val num ${stopDist != null && stopDist < 3 ? 'neg' : ''}">${stopDist != null ? pct(stopDist) + ' away' : '—'}</span></div>
@@ -326,6 +339,7 @@ function tradeCard(t){
       <div class="row"><span class="lab">Buy ${dstr(t.buy_date)} · ${px(t.buy_price)} × ${t.qty}</span><span class="val num">${inr(t.buy_all_in)}</span></div>
       <div class="row"><span class="lab">Sell ${dstr(t.sell_date)} · ${px(t.sell_price)} × ${t.qty}</span><span class="val num">${inr(t.sell_net)}</span></div>
       <div class="row"><span class="lab">Held</span><span class="val num">${t.days_held} day${t.days_held === 1 ? '' : 's'}</span></div>
+      <div class="row"><span class="lab">Charges <span class="d">(buy ${inr(t.buy_charges || 0)} + sell ${inr(t.sell_charges || 0)})</span></span><span class="val num">${inr((t.buy_charges || 0) + (t.sell_charges || 0))}</span></div>
     </div>
     ${t.thesis ? `<p class="tnote"><strong>Thesis.</strong> ${esc(t.thesis)}</p>` : ''}
     ${t.notes ? `<p class="tnote"><strong>Exit.</strong> ${esc(t.notes)}</p>` : ''}

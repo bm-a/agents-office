@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Clickable 3D objects.** Desks, chairs, monitors, walkways and plants are all clickable — each opens a Bloomberg-styled object card describing it (desk cards name the agent, the desk's department and what's live right now, with an OPEN CHAT shortcut; monitors describe the live session; walkways the dept↔Brain uplink; plants the ambience division). × top-right and Esc close it; on mobile it docks as a bottom sheet.
+- **Every panel has a visible ×.** The focus rail, the company board and the mobile task sheet all got close buttons (calendar, Brain, popovers, the dept sheet and the new object card already had theirs). Esc closes everything, topmost first.
+- **DESKTOP / MOBILE mode toggle.** A Bloomberg-segmented control in the top bar switches the layout explicitly — desktop is the full experience, mobile the touch-first one (touch orbit, two-finger pinch zoom, 44px targets, 390px-friendly sheets). The choice persists in localStorage; `?desktop=1` / `?mobile=1` override it per load. The dark path stays default; D still toggles the light theme.
+- **Fixed the mobile sheet wiring.** `initMobileChrome()` was defined but never called — the TASKS button and the sheet ✕ are now switched on in mobile mode.
+
 ## 3.2.1-beta.2 — 19 Sep 2026
 
 - **Licence.** LICENSE now opens with the Required Notices (Copyright 2026 Sahni.ai; Agents Office is a Sahni.ai product) and Sahni.ai's additional terms: the name and mark stay, no renaming or rebranding, no wiring it into or bundling it with another product, agent system or workforce, and anything else needs written permission. The PolyForm Noncommercial 1.0.0 text below them is unchanged. README says the same in plain English. No change to the office itself.

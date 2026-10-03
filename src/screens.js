@@ -1,10 +1,9 @@
 // LIVE SCREENS (14 Sep 2026). AJ: viewers ask "what are they doing, it just looks like an animation" —
 // so every monitor plays what its seat really runs on. Three players, one per screen kind:
-//   cli  — a recorded Claude Code session (real tool calls, real results, real timings; recorded by
-//          industry-demos/screens/tools/record.mjs against the demo company's sample brain), replayed
+//   cli  — a recorded terminal session (real tool calls, real results, real timings), replayed
 //          at recorded speed and looped, drawn the way the CLI prints.
 //   web  — a real web page captured from Chrome (a tall strip), scrolled at reading pace inside a
-//          browser frame with the Claude-in-Chrome badge, the row being read outlined.
+//          browser frame with the reader badge, the row being read outlined.
 //   app  — the document the seat is producing, typed out in a document window.
 // Data arrives as window.SCREENS ({ seats:{id:{kind, rec|page|doc}}, transcripts, pages }), built by
 // industry-demos/screens/tools/assemble.mjs and injected by build-industry.mjs --screens. Without it
@@ -31,7 +30,7 @@ function canvas() {
 }
 function rrect(x, X, y, w, h, r) { x.beginPath(); x.roundRect(X, y, w, h, r); }
 
-/* ================= cli: Claude Code, exactly as it prints ================= */
+/* ================= cli: a terminal session, exactly as it prints ================= */
 const CLI = { bg: '#141416', ink: '#E8E6DF', dim: '#8B8E95', tool: '#5FCB95', spin: '#D97757', box: '#D97757', bar: '#26262A', prompt: '#E8E6DF' };
 const VERBS = ['Thinking', 'Cogitating', 'Pondering', 'Deliberating', 'Synthesizing', 'Reasoning', 'Considering', 'Working', 'Reading', 'Composing', 'Checking'];
 const GLYPHS = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
@@ -68,7 +67,7 @@ function cliPlayer(seat, tr) {
   const banner = () => {
     lines.length = 0;
     lines.push({ s: '╭' + '─'.repeat(COLS - 2) + '╮', col: CLI.box });
-    lines.push({ s: '│ ✻ Welcome to Claude Code' + ' '.repeat(COLS - 27) + '│', col: CLI.box, mix: [[2, 3, CLI.spin], [4, 26, CLI.ink]] });
+    lines.push({ s: '│ ✻ ray office terminal' + ' '.repeat(COLS - 27) + '│', col: CLI.box, mix: [[2, 3, CLI.spin], [4, 26, CLI.ink]] });
     lines.push({ s: '│' + ' '.repeat(COLS - 2) + '│', col: CLI.box });
     lines.push({ s: '│   ' + (tr.model && /opus/i.test(tr.model) ? 'Opus' : 'Sonnet') + ' · ~/' + BRAIN + ' '.repeat(Math.max(1, COLS - 3 - 2 - (tr.model && /opus/i.test(tr.model) ? 4 : 6) - 5 - BRAIN.length)) + '│', col: CLI.box, mix: [[4, COLS - 2, CLI.dim]] });
     lines.push({ s: '╰' + '─'.repeat(COLS - 2) + '╯', col: CLI.box });
@@ -102,7 +101,7 @@ function cliPlayer(seat, tr) {
     // title bar (macOS Terminal): traffic lights + title
     x.fillStyle = CLI.bar; x.fillRect(0, 0, W, TOP);
     for (const [i, col] of [['#FF5F57'], ['#FEBC2E'], ['#28C840']].map((a, i) => [i, a[0]])) { x.fillStyle = col; x.beginPath(); x.arc(14 + i * 18, TOP / 2, 5, 0, Math.PI * 2); x.fill(); }
-    x.fillStyle = '#A9ABB2'; x.font = `500 11px ${SANS}`; x.textAlign = 'center'; x.fillText(`${seat.name ? seat.name.toLowerCase().replace(/ /g, '-') : 'agent'} — claude — ~/${BRAIN}`, W / 2, 16); x.textAlign = 'left';
+    x.fillStyle = '#A9ABB2'; x.font = `500 11px ${SANS}`; x.textAlign = 'center'; x.fillText(`${seat.name ? seat.name.toLowerCase().replace(/ /g, '-') : 'agent'} — ray — ~/${BRAIN}`, W / 2, 16); x.textAlign = 'left';
     // scrollback: the last lines that fit, leaving the spinner line
     const spinning = promptShown && el > typed && !done;
     const room = Math.floor((H - TOP - PAD - (spinning ? LH + 6 : 0)) / LH);
@@ -142,8 +141,8 @@ function cliPlayer(seat, tr) {
   };
 }
 
-/* ================= web: a real page under Claude in Chrome ================= */
-const CH = { tabs: '#DEE1E6', tab: '#FFFFFF', bar: '#FFFFFF', omni: '#F1F3F4', ink: '#202124', dim: '#5F6368', claude: '#D97757', line: '#DADCE0' };
+/* ================= web: a real page under the reader ================= */
+const CH = { tabs: '#DEE1E6', tab: '#FFFFFF', bar: '#FFFFFF', omni: '#F1F3F4', ink: '#202124', dim: '#5F6368', accent: '#D97757', line: '#DADCE0' };
 const TABS = 24, BAR = 30, CHROME = TABS + BAR;
 
 function webPlayer(seat, page) {
@@ -177,19 +176,19 @@ function webPlayer(seat, page) {
       const sy = y / scale, sh = view / scale;
       x.drawImage(img, 0, sy, page.w || img.width, sh, 0, CHROME, W, view);
     } else { x.fillStyle = '#F1F3F4'; x.fillRect(0, CHROME, W, view); }
-    // the row being read: Claude's outline
+    // the row being read: the reader's outline
     if (mark && now > mark.at && now < mark.at + 2600) {
       const a = Math.min(1, (now - mark.at) / 250) * Math.min(1, (mark.at + 2600 - now) / 500);
       x.strokeStyle = `rgba(217,119,87,${(0.95 * a).toFixed(2)})`; x.lineWidth = 2;
       rrect(x, 8, CHROME + mark.y * view, W - 16, mark.h, 4); x.stroke();
       x.fillStyle = `rgba(217,119,87,${(0.9 * a).toFixed(2)})`; rrect(x, 8, CHROME + mark.y * view - 12, 54, 12, 3); x.fill();
-      x.fillStyle = `rgba(255,255,255,${a.toFixed(2)})`; x.font = `600 8px ${SANS}`; x.fillText('Claude', 14, CHROME + mark.y * view - 3);
+      x.fillStyle = `rgba(255,255,255,${a.toFixed(2)})`; x.font = `600 8px ${SANS}`; x.fillText('ray', 14, CHROME + mark.y * view - 3);
     }
     // chrome: tab strip
     x.fillStyle = CH.tabs; x.fillRect(0, 0, W, TABS);
     for (const [i, col] of ['#FF5F57', '#FEBC2E', '#28C840'].entries()) { x.fillStyle = col; x.beginPath(); x.arc(13 + i * 17, TABS / 2, 5, 0, Math.PI * 2); x.fill(); }
     x.fillStyle = CH.tab; rrect(x, 66, 4, 190, TABS - 4, 6); x.fill();
-    x.fillStyle = CH.claude; x.beginPath(); x.arc(78, TABS / 2 + 2, 4, 0, Math.PI * 2); x.fill();
+    x.fillStyle = CH.accent; x.beginPath(); x.arc(78, TABS / 2 + 2, 4, 0, Math.PI * 2); x.fill();
     x.fillStyle = CH.ink; x.font = `11px ${SANS}`; x.fillText((page.title || host).slice(0, 30), 88, TABS / 2 + 6);
     x.fillStyle = CH.dim; x.fillText('+', 268, TABS / 2 + 6);
     // toolbar + omnibox
@@ -197,9 +196,9 @@ function webPlayer(seat, page) {
     x.fillStyle = CH.dim; x.font = `13px ${SANS}`; x.fillText('‹  ›  ↻', 10, TABS + 20);
     x.fillStyle = CH.omni; rrect(x, 66, TABS + 5, W - 66 - 74, BAR - 10, 10); x.fill();
     x.fillStyle = CH.ink; x.font = `11px ${SANS}`; x.fillText('🔒 ' + (page.url || '').replace(/^https?:\/\//, '').slice(0, 58), 76, TABS + 19);
-    // the Claude in Chrome badge
-    x.fillStyle = CH.claude; rrect(x, W - 66, TABS + 6, 56, BAR - 12, 9); x.fill();
-    x.fillStyle = '#fff'; x.font = `600 10px ${SANS}`; x.fillText('✱ Claude', W - 58, TABS + 19);
+    // the reader badge
+    x.fillStyle = CH.accent; rrect(x, W - 66, TABS + 6, 56, BAR - 12, 9); x.fill();
+    x.fillStyle = '#fff'; x.font = `600 10px ${SANS}`; x.fillText('✱ ray', W - 58, TABS + 19);
     x.fillStyle = CH.line; x.fillRect(0, CHROME - 1, W, 1);
     if (now < reload) { const p = 1 - (reload - now) / 900; x.fillStyle = '#1A73E8'; x.fillRect(0, CHROME - 2, W * p, 2); }
   }

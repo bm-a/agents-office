@@ -18,119 +18,84 @@
 // to the department lead, who splits it into pieces; the pieces appear as cards on the teammates'
 // desks (↳), all IN PROGRESS at once, each teammate's finished piece lands in their own chat and
 // walks back to the lead (📋), notes they leave each other pop as 💬, and the lead's card finishes
-// with the combined deliverable. Live: the server does it (serve.mjs runTeam, one Claude process per
+// with the combined deliverable. Live: the server does it (one worker process per
 // desk); this page reads `task.team` off /api/tasks. Demo: the same theatre on a timer.
 import { DEPTS, AGENTS, DEPT_KEYS } from './data.js';
 import { P, rnd, ri } from './v1data.js';
 import { applyTasks, PROFILE, titleCase } from './profile.js';
 import { parseWhen, describe, nextRun, fromPicker, untilText } from './when.js';
 import { initCalendar } from './calendar.js'; // V3.2.1 (16 Sep 2026): the calendar on P
-import { MODEL_KEYS, MODELS, DEFAULT_MODEL, modelName, normModel, FROM_TEXT , EFFORT_KEYS, EFFORT_NAME, normEffort, effortName, effortFor } from './models.js';
+// RAY EDITION (30 Sep 2026): src/models.js is no longer imported — the model/effort picker is
+// gone and the phone build has no model integration. (models.js stays on disk only for the
+// legacy local dev scripts serve.mjs / check.mjs, which are not part of the phone deployment.)
 
-const SEGMENTS = ['roofing', 'HVAC', 'dental', 'logistics', 'fitness', 'property', 'landscaping', 'legal'];
+const SEGMENTS = ['insider', 'quant', 'firmware', 'dashboard', 'vault'];
 
 // generic-business task pool per agent (AJ: generic business, not TerriTool-flavoured)
 const POOL = {
-  elead: ['Review the overnight inbox, route 40 emails', 'Tone pass on 6 client replies', 'Weekly inbox summary for AJ', 'Update the reply templates', 'Escalate 2 threads to AJ'],
-  cmail: ['Reply to the {co} scope question', 'Send the kickoff summary to {co}', 'Answer 9 client emails from overnight', 'Draft the price-increase notice', 'Chase {co} for the brief sign-off'],
-  imail: ['Triage 14 internal emails', 'Circulate the weekly numbers', 'Reply to the team about the Q3 plan', 'Summarise the 40-message thread', 'Book the client review in the calendar'],
-  vmail: ['Summarise the vendor SLA revision', 'Reply to the SMS provider about the plan tier', 'Request a quote from the print vendor', 'Chase the hosting vendor on the outage report', 'Confirm the vendor renewal date'],
-  kmail: ['Answer the designer’s invoice query', 'Send the brief to the copywriter', 'Confirm the contractor’s hours for the week', 'Chase the developer for the estimate', 'Reply to the video contractor about the deadline'],
-  lexi:  ['Review overnight enrichment before the reps see it', "Build today's call lists", 'Chase {n} deals quiet past 14 days', 'Prep the weekly pipeline review', 'Tighten the ICP with Prospector'],
-  enzo:  ['Enrich {n} overnight signups', 'Verify mobiles on the AU batch', 'Backfill company size on 12 leads', 'Score the morning batch for the Sales Lead', 'Re-run 3 failed enrichments'],
-  ilm:   ['Qualify {n} inbound leads from the website', 'Route 6 hot leads to the reps', 'Reply to {co} within the hour', 'Book a discovery call with {co}', 'Clean the inbound queue, 12 duplicates'],
-  pros:  ['Mine {n} {segment} companies for outbound', 'Score 40 prospects against the ICP', "Build tomorrow's cold-call list", 'Cross-check new finds against customers', 'Verify mobiles on the new batch'],
-  piper: ['Proposal for the 40-seat prospect', 'Update the Growth-plan proposal template', 'Pricing options for {co}', 'Proposal follow-up pack for {co}', 'Sign-online link for the {co} proposal'],
-  folo:  ['Follow up {n} quotes sent last week', 'Re-engage 8 cold leads', 'Log call outcomes into the CRM', 'Send the 14-day nudge to quiet deals', 'Book a demo for {co}'],
-  mlead: ["Review the week's content before it ships", 'Shift $50/day into the winning ad', 'Set next week’s reel line-up', 'Weekly marketing summary for AJ', 'Brief Research on the {segment} angle'],
-  riley: ['Morning scan: 49 sources', 'Weekly competitor pricing scan', 'Pull 3 stats for the newsletter', 'Trend brief for the Sales Lead', 'Read 6 buyer reviews for angles'],
-  newt:  ['Draft the September newsletter', 'A/B subject lines for issue 32', 'Log issue 31 numbers', 'Rebuild the welcome sequence, email 2', 'Clean 40 bounced subscribers'],
-  gfx:   ['Quote-card set for the pricing page', 'Story + square exports, brand kit', 'Thumbnail for the "10am rule" reel', 'Carousel cover, 3 options', 'Resize the ad creative to 4:5'],
-  ada:   ['Refresh the fatigued ad set', 'Launch 4 variants of "cold call anxiety"', 'Pull the daily spend report', 'Shift $50/day into the winner', 'Exclude existing customers from targeting'],
-  iggy:  ['Write the hook for the carousel', 'Log hook performance to the playbook', 'Schedule 3 posts for the week', 'Reply to 14 DMs', 'Cut the caption on the "10am rule" reel'],
-  vid:   ['Render the "10am rule" reel, captions on', 'Cut a 15 s teaser from the demo', 'Re-render ad variants in 4:5', 'Caption pass on the webinar clip', 'Colour + captions on the founder reel', 'Render the 45 s demo cut'],
-  olead: ["Review the week's contracts and flags", 'Chase {n} open vendor renewals', 'Prioritise Intel’s findings', 'Weekly operations summary for AJ', 'Prep the board pack sections'],
-  scout: ['Competitor pricing page diff', 'G2 review scan for the top 3 rivals', 'Opportunity memo: rival price rise', 'Market map refresh, Q3', 'Watch the rival launch page'],
-  legal: ['Review the amended MSA, 2 clauses', 'Contractor agreement for the designer', 'Privacy policy annual check', 'Redline the {co} terms', 'Check the price-lock clause'],
-  comply:['AU regulation page changed, diffing', 'Consent wording audit on the forms', 'Data retention check, 3 systems', 'Quarterly compliance checklist', 'Cookie banner review'],
-  report:['Weekly board pack, 6 sections', 'Monthly KPI roll-up', 'Churn cohort report for the Brain', 'Delivery SLA report', 'Rep activity summary'],
-  dash:  ['Refresh the sales dashboard', 'Add the delivery on-track tile', 'Fix the revenue chart, wrong period', 'Build the inbox response-time view', 'Weekly dashboard health check'],
-  alead: ["Review the week's cash position", 'Approve the contractor payment run', 'Prep the month-end pack', 'Vendor rate review', 'Cash forecast, next 8 weeks'],
-  invo:  ['Issue {n} invoices for the week', 'Chase 3 overdue invoices', 'Credit note for {co}', 'Invoice {co} $840', 'Reminder 2 of 3 to {co}'],
-  apay:  ["Match today's card charges", 'Audit contractor invoice #218 vs contract', 'Schedule the contractor payments', 'Flag a subscription overlap', 'Check the SMS provider plan tier'],
-  recon: ['Reconcile 14 payments, 2 flagged', 'Month-end bank reconciliation', 'Match Stripe payouts to invoices', 'Clear 2 unmatched fees', 'Tie out the card statement'],
-  dlead: ['Review 12 live projects for risk', 'Weekly delivery summary for AJ', 'Re-plan the {co} timeline', 'Approve the {co} handover', 'Staff the {co} project'],
-  pco:   ['Update the {co} project plan', 'Move 3 milestones after the scope change', 'Chase 2 overdue client sign-offs', 'Schedule the {co} review', 'Log this week’s hours per project'],
-  qa:    ['QA the {co} website handover', 'Check the {co} report pack for errors', 'Test the client portal login flow', 'Proof the asset set, brand rules', 'Regression pass on the booking form'],
-  crep:  ['September status report for {co}', 'Monthly report pack, 14 clients', 'Add the results section to the {co} report', 'Send the {co} report, 2 flags', 'Chart the {co} lead numbers'],
-  cass:  ['Sync the {co} assets to the portal', 'Organise the {co} asset library', 'Export the logo set, 4 formats', 'Archive the finished {co} files', 'Tag 60 assets by campaign'],
-  dasst: ['Draft the {co} social templates', 'Resize the {co} banners, 6 sizes', 'Mock up the {co} landing page', 'Prepare the {co} brand sheet', 'Design the {co} report cover'],
-  ona:   ['Kickoff call prep for {co}', 'Onboarding checklist for {co}', 'Set up the {co} client portal', 'Walk {co} through the first report', 'Day-7 check-in with {co}'],
+  radar: ['Morning BSE filing scan, 10-day window', 'Re-check promoter reshuffle flags', 'Quant research tick: 2025 OOS grind', 'Score the overnight signals', 'Vet the digest shortlist before any buy number'],
+  deepscan: ['Re-read the {co} filings', 'Announcement-lag check, {n} names', 'Cross-check buy-vs-sell offsets', 'File scan notes to the Brain', 'Deep scan: promoter trust sales'],
+  forge: ['Build shipped: office board → phone', 'Fix the bundle, rebuild', 'Test the shim endpoints', 'Push the deploy over the Tor pipe', 'Smoke-test the 3D first paint'],
+  firmware: ['Verify RS485 init against the golden reference', 'BMS tester soak, 2.5M polls', 'UART trace review', 'NVS params check', 'Flash v2.9.2, confirm rx/tx LEDs'],
+  apps: ['Push the dashboard to the phone', 'Hotspot IP detect + re-push', 'Tor tunnel health check', 'Refresh cron verify', 'Ship the serve script'],
+  scribe: ["File today's memory entries", 'Parse the contract note', 'Reconcile holdings vs Groww', 'Write the daily log section', 'Update the trade log'],
+  archive: ['Index the vault, rebuild the graph', 'Orphan-link check', 'Link the new notes', 'Verify every [[link]] resolves', 'Archive the old Brain notes'],
+  relay: ['WhatsApp relay check', 'Discord bridge heartbeat', 'Habit nudge armed for 18:00', 'Forward the phone alerts', 'Quiet hours — no spam'],
+  pager: ['Watchdog sweep: all crons', 'Tor tunnel status', 'Discord bot heartbeat', 'Phone sshd check', 'Self-heal dry run'],
+  captain: ['Route the next worker batch', 'Split the research across workers', 'Arm the SOTL fill check', 'Arm the SIP mandate check', 'Plan the week ahead'],
+  bhavishya: ["Review the owner's pending approvals", 'Check the payslip against leave cuts', 'Confirm the SOTL fill in Groww', 'Glance at the sleeve P&L', 'Sign off the SIP switch'],
+  sentinel: ['SOTL ×2 @ ₹702.90 — sell ₹735 live', 'September leave cuts ≈ ₹1,600', 'SIPs ₹3,800/mo → ICICI from Oct', 'Stipend lands Oct 10–15', 'Sleeve guard: no averaging down'],
 };
-
-// keywords that route a typed task to the right agent inside the chosen department
-const KEYS = {
-  elead: ['summary', 'template', 'escalate', 'inbox'], cmail: ['client', 'customer', 'reply', 'scope', 'kickoff'],
-  imail: ['team', 'internal', 'staff', 'calendar', 'thread'], vmail: ['vendor', 'supplier', 'sla', 'renewal', 'quote'],
-  kmail: ['contractor', 'freelance', 'designer', 'developer', 'copywriter'],
-  lexi: ['pipeline', 'call list', 'rep', 'review', 'deal'], enzo: ['enrich', 'signup', 'verify', 'data'],
-  ilm: ['inbound', 'qualify', 'route', 'website lead', 'discovery'], pros: ['prospect', 'list', 'mine', 'find', 'companies', 'icp'],
-  piper: ['proposal', 'pricing', 'seat', 'quote'], folo: ['follow', 'chase', 'nudge', 'demo'],
-  mlead: ['content plan', 'calendar', 'budget', 'marketing summary', 'line-up'], riley: ['research', 'scan', 'trend', 'stat', 'source'], newt: ['newsletter', 'issue', 'subscriber', 'welcome'],
-  gfx: ['design', 'graphic', 'thumbnail', 'image', 'creative', 'banner', 'card', 'cover'], ada: ['ad', 'ads', 'meta', 'campaign', 'spend', 'budget', 'variant'],
-  iggy: ['instagram', 'post', 'hook', 'dm', 'story', 'carousel', 'schedule'], vid: ['video', 'reel', 'cut', 'render', 'edit', 'caption', 'clip', 'footage', 'teaser'],
-  olead: ['renewal', 'escalate', 'board pack', 'operations summary', 'checklist'], scout: ['intel', 'competitor', 'rival', 'market', 'memo'], legal: ['contract', 'msa', 'terms', 'legal', 'clause', 'agreement'],
-  comply: ['compliance', 'regulation', 'consent', 'privacy', 'retention', 'cookie'], report: ['report', 'kpi', 'board pack', 'roll-up', 'summary'],
-  dash: ['dashboard', 'chart', 'tile', 'metric', 'view'],
-  alead: ['cash', 'vendor', 'forecast', 'month-end', 'approve'], invo: ['invoice', 'overdue', 'credit note'],
-  apay: ['bill', 'pay', 'payable', 'charge', 'contractor', 'subscription'], recon: ['reconcile', 'bank', 'stripe', 'match', 'statement'],
-  dlead: ['risk', 'timeline', 'handover', 'staff', 'summary'], pco: ['plan', 'milestone', 'schedule', 'sign-off', 'hours'],
-  qa: ['qa', 'test', 'check', 'proof', 'bug', 'regression'], crep: ['report', 'status', 'results', 'monthly'],
-  cass: ['asset', 'file', 'portal', 'library', 'export', 'logo'], dasst: ['design', 'mock', 'template', 'banner', 'brand sheet', 'resize'],
-  ona: ['onboard', 'kickoff', 'checklist', 'welcome'],
-};
-
-// handoff chains — one piece of work passing desk to desk (the multi-agent story)
 const CHAINS = [
-  [['mlead', 'Set next week’s reel line-up'], ['riley', 'Research angles for the line-up'], ['iggy', 'Write the hooks for the line-up']],
-  [['legal', 'Review the amended {co} MSA'], ['olead', 'Decide on the {co} clause, escalate if needed']],
-  [['riley', 'Research hook angles for the next reel'], ['iggy', 'Write the reel script from the research'], ['vid', 'Cut and render the reel, captions on']],
-  [['gfx', 'Creative for the new {segment} ad set'], ['ada', 'Launch the {segment} ad set, 4 variants']],
-  [['pros', 'Build a {segment} prospect list'], ['ilm', 'Qualify the {segment} list, route the hot ones'], ['lexi', 'Review the routed leads with the reps']],
-  [['enzo', 'Enrich the overnight signups'], ['ilm', 'Route the enriched batch to the reps']],
-  [['ilm', 'Qualified lead: {co} wants a quote'], ['piper', 'Proposal for {co}'], ['legal', 'Check the {co} terms']],
-  [['piper', 'Proposal accepted by {co}'], ['ona', 'Onboard {co}: kickoff call'], ['pco', 'Set up the {co} project plan']],
-  [['cmail', 'Scope change request from {co}'], ['pco', 'Re-plan the {co} milestones'], ['crep', 'Update the {co} status report']],
-  [['dasst', 'Draft the {co} asset set'], ['qa', 'QA the {co} asset set'], ['cass', 'Publish the {co} assets to the portal']],
-  [['scout', 'Rival pricing change detected, memo'], ['piper', 'Update the proposal pricing table']],
-  [['invo', "Issue this week's invoices"], ['recon', 'Match payments to the new invoices']],
-  [['report', 'Monthly KPI roll-up'], ['dash', 'Refresh the KPI dashboard'], ['alead', 'Fold the KPIs into the month-end pack']],
-  [['vmail', 'Vendor quote received for {co}'], ['apay', 'Check the vendor quote against budget']],
-  [['kmail', 'Contractor invoice query from the designer'], ['apay', 'Audit the contractor invoice vs contract']],
-  [['imail', 'Team asks for the Q3 numbers'], ['dash', 'Refresh the Q3 dashboard']],
-  [['crep', 'September report ready for {co}'], ['cmail', 'Send the {co} report with a summary']],
+  [['radar', 'Scan {n} filings, flag reshuffles'], ['deepscan', 'Re-read the flagged filings'], ['scribe', 'File the scan notes']],
+  [['forge', 'Build the {segment} update'], ['firmware', 'Flash and verify on the bench'], ['apps', 'Push the dashboard to the phone']],
+  [['relay', 'Relay the {segment} alert'], ['pager', 'Watchdog sweep after the alert'], ['captain', 'Route the follow-up']],
+  [['sentinel', 'Money check: the {segment} sleeve'], ['bhavishya', 'Owner sign-off on the numbers'], ['scribe', 'Log it to the Brain']],
+  [['archive', 'Index the new {segment} notes'], ['scribe', 'Cross-link the vault'], ['radar', 'Vet the new signals']],
 ];
+
+// keywords that route a typed task to the right crew agent inside the chosen department
+const KEYS = {
+  radar: ['filing', 'insider', 'scan', 'vet', 'signal', 'bse', 'quant', 'research'],
+  deepscan: ['re-read', 'reread', 'announcement', 'lag', 'offset', 'promoter', 'trust'],
+  forge: ['build', 'fix', 'bundle', 'deploy', 'test', 'ship', 'code'],
+  firmware: ['esp32', 'firmware', 'rs485', 'flash', 'bms', 'uart', 'meter'],
+  apps: ['dashboard', 'phone', 'hotspot', 'tor', 'tunnel', 'app'],
+  scribe: ['note', 'log', 'memory', 'contract', 'doc', 'write'],
+  archive: ['vault', 'index', 'link', 'archive', 'graph', 'brain'],
+  relay: ['whatsapp', 'discord', 'notify', 'nudge', 'relay', 'message', 'alert'],
+  pager: ['watchdog', 'heartbeat', 'cron', 'health', 'uptime', 'monitor'],
+  captain: ['plan', 'route', 'split', 'schedule', 'assign', 'coordinate'],
+  bhavishya: ['approve', 'salary', 'payslip', 'money', 'sign-off', 'stipend'],
+  sentinel: ['sotl', 'sip', 'position', 'leave', 'pnl', 'p&l', 'deduction'],
+};
 
 applyTasks({ POOL, KEYS, CHAINS, SEGMENTS, AGENTS }); // INDUSTRY PROFILE (12 Sep 2026): per-industry demo file; no-op otherwise
 function fill(s, v) { return s.replace('{co}', v.co).replace('{n}', v.n).replace('{segment}', v.segment); }
 function vars() { return { co: rnd(P.co), n: ri(6, 40), segment: rnd(SEGMENTS) }; }
 function timeStr(ts) {
+  if (!ts || !isFinite(+new Date(ts))) return '';
   return new Date(ts).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
 }
-function span(ms) { // "4 min" · "1 h 12 m" · "3 h"
+function span(ms) { // "4 min" · "1 h 12 m" · "3 h" — never call with a made-up timestamp
+  if (!isFinite(ms)) return '';
   const m = Math.max(0, Math.round(ms / 60000));
   if (m < 1) return 'just now';
   if (m < 60) return m + ' min';
   const h = Math.floor(m / 60), r = m % 60;
   return r ? `${h} h ${r} m` : `${h} h`;
 }
+// Timing honesty: a task shows an age ONLY from t.ageBase — a timestamp that is real
+// (set on this device when the user adds/schedules it, or sent by the server when it has
+// a real one). Server tasks with no real time carry none, and show no age at all.
+function agoText(t) { return t.ageBase ? span(Date.now() - t.ageBase) : ''; }
 const agentOf = id => AGENTS.find(a => a.id === id);
 const STATE_LABEL = { next: 'Backlog', doing: 'In progress', waiting: 'Waiting', done: 'Done', sched: 'Scheduled', scheduled: 'Scheduled' }; // scheduled (V3.2.1): a task with a date, not yet fired
 
 export function initTasks(ctx) {
   const { R, deptRT, spawnEmote, chatPush, chatHist, feedPush, zoomToApproval, enterFocus, openAgent,
           getFocused, esc, brainWrite, brain, onLive, onTools, requestApproval, setStuck, onUsage } = ctx;
-  // LIVE mode (served by serve.mjs): the bar routes through Claude, agents produce real
+  // LIVE mode (served by serve.mjs): the bar routes to Ray's inbox, agents produce real
   // deliverables saved as notes in the brain, and tasks persist. Opened as a file it stays demo.
   let live = false;
   const API = '/api';
@@ -149,13 +114,13 @@ export function initTasks(ctx) {
   const byNext = (a, b) => (a.paused ? Infinity : a.nextAt || Infinity) - (b.paused ? Infinity : b.nextAt || Infinity);
   const doneCount = Object.fromEntries(DEPT_KEYS.map(k => [k, 0]));
   const board = { open: false };
-  let dirty = false, lastBadge = 0, lastBar = 0, lastAgo = 0;
+  let dirty = false, lastBadge = 0, lastAgo = 0;
 
   /* ---------- model ---------- */
   function mk(o) {
     const a = agentOf(o.agent);
     const now = Date.now();
-    const t = { id: seq++, dept: a.dept, state: 'next', progress: 0, addedAt: now, changedAt: now, ...o };
+    const t = { id: seq++, dept: a.dept, state: 'next', progress: 0, addedAt: now, changedAt: now, ageBase: null, ...o };
     tasks.push(t);
     return t;
   }
@@ -261,6 +226,9 @@ export function initTasks(ctx) {
       doneCount[k] = n;
     }
   }
+  // demo seeds carry their local wall-clock time as the age base — real timestamps
+  // of the simulation on this device (live server tasks keep ageBase null: no real time)
+  for (const t of tasks) if (t.ageBase == null && !t.live) t.ageBase = t.addedAt;
 
   /* ---------- badge rows (far-zoom layer): DOING · NEXT · DONE per pod ---------- */
   function rowHTML(k) {
@@ -292,7 +260,6 @@ export function initTasks(ctx) {
     hint: panel.querySelector('.tp-hint'), chips: panel.querySelector('.tp-chips'), rows: panel.querySelector('.tp-rows'),
     scope: panel.querySelector('.tp-scope'),
     rep: panel.querySelector('.tp-rep'), repRow: panel.querySelector('.tp-rep-row'), cad: panel.querySelector('.tp-cad'), at: panel.querySelector('.tp-at'), okc: panel.querySelector('.tp-okc'), next: panel.querySelector('.tp-next'),
-    model: panel.querySelector('.tp-model'), effort: panel.querySelector('.tp-effort'),
     bigBtn: panel.querySelector('.tp-big-btn'), team: panel.querySelector('.tp-team'),
   };
   // V3.7: the box grows with the text (one line at rest, six at most) and the big editor mirrors it
@@ -302,31 +269,19 @@ export function initTasks(ctx) {
   function openBig() { B_.in.value = P_.input.value; B_.in.placeholder = P_.input.placeholder; big.classList.add('on'); mirrorHint(); B_.in.focus(); B_.in.setSelectionRange(B_.in.value.length, B_.in.value.length); }
   function closeBig() { if (!big.classList.contains('on')) return; big.classList.remove('on'); grow(); if (P_.input.value) P_.input.focus(); }
   function mirrorHint() { B_.hint.innerHTML = P_.hint.innerHTML; B_.hint.className = P_.hint.className.replace('tp-hint', 'tp-hint tb-hint'); }
-  // V3.6 (D2): the model menu — Sonnet · Opus · Fable. Shows the office default; change it and it applies to this task (or this routine, with REPEAT on)
-  let officeModel = DEFAULT_MODEL, modelTouched = false;
-  P_.model.innerHTML = MODEL_KEYS.map(k => `<option value="${k}">${MODELS[k].name.toUpperCase()}</option>`).join('');
-  P_.model.value = officeModel;
-  P_.model.addEventListener('change', () => { modelTouched = P_.model.value !== officeModel; P_.model.classList.toggle('set', modelTouched); updateHint(); });
-  P_.model.addEventListener('keydown', e => e.stopPropagation());
-  function setOfficeModel(k) { officeModel = normModel(k) || DEFAULT_MODEL; if (!modelTouched) P_.model.value = officeModel; }
-  const chosenModel = () => (modelTouched ? P_.model.value : null);
-  function resetModel() { modelTouched = false; P_.model.value = officeModel; P_.model.classList.remove('set'); resetEffort(); }
-  const modelBit = t => t.modelUsed ? ` · ${modelName(t.modelUsed)}${t.effortUsed ? ' ' + t.effortUsed : ''}${t.modelFrom && t.modelFrom !== 'office' ? ' (' + FROM_TEXT[t.modelFrom] + ')' : ''}` : '';
-  // V3.6.1: the EFFORT menu beside the model — AUTO (the model's own; Opus = high) · Low · Medium · High · Extra high · Max. Same precedence as the model.
-  let officeEffort = '', effortTouched = false;
-  P_.effort.innerHTML = `<option value="">AUTO</option>` + EFFORT_KEYS.map(k => `<option value="${k}">${EFFORT_NAME[k].toUpperCase()}</option>`).join('');
-  P_.effort.value = officeEffort;
-  P_.effort.addEventListener('change', () => { effortTouched = P_.effort.value !== officeEffort; P_.effort.classList.toggle('set', effortTouched); updateHint(); });
-  P_.effort.addEventListener('keydown', e => e.stopPropagation());
-  function setOfficeEffort(k) { officeEffort = normEffort(k) || ''; if (!effortTouched) P_.effort.value = officeEffort; }
-  const chosenEffort = () => (effortTouched ? (P_.effort.value || 'auto') : null); // 'auto' = the owner chose the model's own over the office's
-  const effortSend = () => { const e = chosenEffort(); return e && e !== 'auto' ? e : undefined; };
-  function resetEffort() { effortTouched = false; P_.effort.value = officeEffort; P_.effort.classList.remove('set'); }
-  const effortUsedFor = (mdl) => effortFor({ task: effortSend(), office: chosenEffort() === 'auto' ? '' : officeEffort, model: mdl }); // what a demo card will show
-  const pickBit = (forWhat) => { // the hint's "Opus · High for this task"
-    const bits = []; if (modelTouched) bits.push(modelName(P_.model.value)); if (effortTouched) bits.push(effortName(P_.effort.value || ''));
-    return bits.length ? ` · <b>${bits.join(' · ')}</b> for this ${forWhat}` : '';
-  };
+  // RAY EDITION (30 Sep 2026): the model picker is gone — no model integration on the
+  // phone build. The internals stay as neutrals so task plumbing keeps working.
+  let officeModel = 'ray';
+  function setOfficeModel() {}
+  const chosenModel = () => null;
+  function resetModel() {}
+  const modelBit = () => '';
+  // RAY EDITION: the effort menu is gone with the model picker.
+  function setOfficeEffort() {}
+  const chosenEffort = () => null;
+  const effortSend = () => undefined;
+  const effortUsedFor = () => ({ effort: '', from: '' });
+  const pickBit = () => '';
   // the REPEAT picker (B1): cadence + time; "needs my OK" defaults on (D1)
   let repeat = false;
   P_.cad.innerHTML = [['weekdays', 'Every weekday'], ['daily', 'Every day'], ['mon', 'Mondays'], ['tue', 'Tuesdays'], ['wed', 'Wednesdays'], ['thu', 'Thursdays'], ['fri', 'Fridays'], ['sat', 'Saturdays'], ['sun', 'Sundays'], ['hourly', 'Every hour, 9–5, weekdays']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
@@ -378,7 +333,7 @@ export function initTasks(ctx) {
       const { agent: ra } = route(dept, rt.text || text);
       const need = rt.needsDay ? 'which day? say "every Monday …"' : rt.needsTime ? 'what time? add "at 8am"' : null;
       P_.hint.innerHTML = `<span class="tp-av" style="border-color:${DEPTS[ra.dept].chip};background:${DEPTS[ra.dept].chip}55">⏱</span>Routine · <b>${esc(describe(rt.when) || 'every week')}</b>` +
-        (need ? ` · <span class="tp-amber">${need}</span>` : live ? ' · Claude names the agent when you press Add' : ` · goes to <b>${ra.name}</b>`) + (rt.guessed ? ` · "${esc(rt.guessWord)}" taken as ${rt.when.at}` : '');
+        (need ? ` · <span class="tp-amber">${need}</span>` : live ? ' · Ray picks it up from the inbox when you press Add' : ` · goes to <b>${ra.name}</b>`) + (rt.guessed ? ` · "${esc(rt.guessWord)}" taken as ${rt.when.at}` : '');
       P_.hint.innerHTML += pickBit('routine');
       P_.hint.className = 'tp-hint on'; return;
     }
@@ -391,7 +346,7 @@ export function initTasks(ctx) {
     const busy = agentTasks(a.id, 'doing').length > 0 || R[a.id].state === 'stuck';
     const chip = DEPTS[a.dept].chip;
     P_.hint.innerHTML = `<span class="tp-av" style="border-color:${chip};background:${chip}55">${a.name[0]}</span>` +
-      (live ? `Probably <b>${a.name}</b> · Claude confirms when you press Add`
+      (live ? `Probably <b>${a.name}</b> · reaches Ray's inbox when you press Add`
             : `Goes to <b>${a.name}</b> · ${busy ? 'starts after their current job' : 'starts straight away'}${matched ? '' : ' · say more and I’ll pick a specialist'}`) +
       pickBit('task');
     P_.hint.className = 'tp-hint on';
@@ -423,20 +378,19 @@ export function initTasks(ctx) {
       const text = title, k = dept;
       P_.input.value = ''; P_.input.disabled = true; P_.add.disabled = true;
       const team = asTeam(text);
-      say(team ? `Routing through Claude — <b>${leadOf(k).name}</b> is reading it for the team…` : `Routing through Claude — ${DEPTS[k].name.toLowerCase()} is reading it…`, 'busy');
+      say(`Sending to Ray — ${team ? `<b>${leadOf(k).name}</b> splits it across the team` : `it lands in Ray's inbox`}.`, 'busy');
       try {
-        const mdl = chosenModel();
-        const r = await fetch(API + '/tasks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dept: k, text, model: mdl || undefined, effort: effortSend(), team: team || undefined }) });
+        const r = await fetch(API + '/inbox', { method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ kind: 'task', dept: k, text, team: team || undefined }) });
         if (!r.ok) throw new Error((await r.json()).error || r.statusText);
-        const st = await r.json();
-        const t = mk({ agent: st.agent, title: st.title, text: st.text, plan: st.plan, why: st.why, by: 'you', live: true, sid: st.id, model: st.model, modelUsed: st.model || officeModel, modelFrom: st.model ? 'task' : 'office', effort: st.effort,
-          team: st.team ? { lead: st.team.lead, members: [] } : undefined });
-        resetModel(); resetTeam();
-        touch(t, 'added'); spawnEmote(R[t.agent], st.team ? '⚑' : '📋');
-        say(st.team ? `Added — <b>${agentOf(t.agent).name}</b> has it and is splitting it across the team` : `Added — <b>${agentOf(t.agent).name}</b> has it${st.why ? ' · ' + esc(st.why) : ''}`);
+        const { agent: a } = route(k, text);
+        const t = addTask(a.id, text, 'you'); // on the board too — tracked here, read by Ray in the main chat
+        resetTeam();
+        if (t) say(`Sent — <b>${a.name}</b> has it on the board, and Ray picks it up in the main chat.`);
+        else say(`Sent to Ray's inbox — <b>${a.name}</b> already has five queued, so it's inbox-only for now.`);
         setTimeout(() => { if (!P_.input.value) P_.hint.classList.remove('on'); }, 7000);
       } catch (e) {
-        say(`Claude couldn't take it (${esc(e.message)}). Kept it on the board.`, 'err');
+        say(`Couldn't reach Ray's inbox (${esc(e.message)}). Kept it on the board.`, 'err');
         const { agent: a } = route(k, text); addTask(a.id, text, 'you');
       }
       P_.input.disabled = false; P_.add.disabled = false; P_.input.blur(); // hand the keys back to the office
@@ -479,7 +433,7 @@ export function initTasks(ctx) {
     if (!text) { say('What should happen? The sentence has a time but no task.', 'err'); return; }
     if (live) {
       P_.input.disabled = true; P_.add.disabled = true;
-      say('Setting the routine — Claude is naming the agent…', 'busy');
+      say('Sending the routine to Ray…', 'busy');
       try {
         const r = await fetch(API + '/routines', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dept: k, text, when: rt.when, needsOk: rt.picker ? P_.okc.checked : undefined, model: chosenModel() || undefined, effort: effortSend() }) });
         const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText);
@@ -488,7 +442,7 @@ export function initTasks(ctx) {
         say(`Routine set — <b>${a.name}</b> · ${esc(j.routine.desc)} · next ${esc(untilText(j.routine.nextAt))}${j.routine.needsOk ? ' · waits for your OK' : ' · read-only, no OK needed'}${j.guessed ? ` · "${esc(j.guessed)}" taken as ${j.routine.when.at}` : ''}`);
         P_.input.value = ''; resetModel(); spawnEmote(R[a.id], '⏱'); feedPush(R[a.id], '⏱', `New routine: ${j.routine.title} (${j.routine.desc})`);
         filter = 'sched'; render(true); poll();
-      } catch (e) { say(`Claude couldn't set it (${esc(e.message)}).`, 'err'); }
+      } catch (e) { say(`Couldn't reach Ray's inbox (${esc(e.message)}).`, 'err'); }
       P_.input.disabled = false; P_.add.disabled = false; P_.input.blur();
       return;
     }
@@ -541,8 +495,8 @@ export function initTasks(ctx) {
     el.hidden = !mine.length; if (!mine.length) { el.innerHTML = ''; return; }
     const n = nextOf(mine);
     el.className = 'mrt' + (railExp ? ' exp' : '');
-    el.innerHTML = `<div class="mrt-h"><span>⏱ ${mine.length} routine${mine.length > 1 ? 's' : ''}${n ? ' · next <b>' + esc(untilText(n.nextAt)) + '</b>' : ' · all paused'}</span><span class="car">▸</span></div>
-      <div class="mrt-l">${mine.map(r => `<div class="mrt-r" data-rid="${r.id}"><span>${esc(r.title)}</span><small>${esc(r.desc)} · ${modelName(r.model || officeModel)} · ${r.paused ? 'paused' : 'next ' + esc(untilText(r.nextAt))} · ${r.needsOk ? 'waits for your OK' : 'read-only'}</small>
+    el.innerHTML = `<div class="mrt-h"><span>⏱ ${mine.length} routine${mine.length > 1 ? 's' : ''}${n ? ' · next <b>' + esc(routineWhen(n)) + '</b>' : ' · all paused'}</span><span class="car">▸</span></div>
+      <div class="mrt-l">${mine.map(r => `<div class="mrt-r" data-rid="${r.id}"><span>${esc(r.title)}</span><small>${esc(r.desc)} · ${r.paused ? 'paused' : (r.nextAt ? 'next ' + esc(untilText(r.nextAt)) : esc(routineWhen(r)))} · ${r.needsOk ? 'waits for your OK' : 'read-only'}</small>
         <div class="tp-act"><button class="run" data-act="run">RUN NOW</button><button data-act="${r.paused ? 'resume' : 'pause'}">${r.paused ? 'RESUME' : 'PAUSE'}</button><button data-act="delete">DELETE</button></div></div>`).join('')}</div>`;
     el.querySelector('.mrt-h').addEventListener('click', () => { railExp = !railExp; el.classList.toggle('exp', railExp); });
     el.querySelectorAll('.tp-act button').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); rtAct(b.closest('[data-rid]').dataset.rid, b.dataset.act); }));
@@ -588,7 +542,7 @@ export function initTasks(ctx) {
       const sid = `${st.id}:${p.agent}`;
       let c = tasks.find(x => x.live && x.sid === sid);
       if (!c) {
-        c = mk({ agent: p.agent, title: p.title, text: p.text, by: 'team', live: true, srv: true, sid, piece: true, parent: t.id, leadId: tm.lead, from: tm.lead, addedAt: tm.plannedAt || Date.now(), changedAt: tm.plannedAt || Date.now(), last: 'handoff', running: true });
+        c = mk({ agent: p.agent, title: p.title, text: p.text, by: 'team', live: true, srv: true, sid, piece: true, parent: t.id, leadId: tm.lead, from: tm.lead, addedAt: tm.plannedAt || Date.now(), changedAt: tm.plannedAt || Date.now(), ageBase: tm.plannedAt || null, last: 'handoff', running: true });
         if (!quiet) { spawnEmote(R[p.agent], '📋'); feedPush(R[p.agent], '📋', `Team piece from ${agentOf(tm.lead).name}: ${p.title}`); }
         touch(c, 'handoff');
       }
@@ -644,7 +598,7 @@ export function initTasks(ctx) {
     return true;
   }
   function toDoing(t) { t.state = 'doing'; t.startedAt = performance.now(); t.progress = 0; t.pausedAt = null; t.running = true; t.ready = false; t.srv = true; touch(t, 'started'); }
-  // LIVE: the agent picks the task up → Claude does it on the server → the result lands in the chat
+  // LIVE: the agent picks the task up → the crew works it → the result lands in the chat
   async function runLive(t, feedback) {
     t.running = true; t.ready = false;
     try {
@@ -673,7 +627,7 @@ export function initTasks(ctx) {
       live = true; setOfficeModel(h.model); setOfficeEffort(h.effort);
       if (h.teams) { teamsCfg = { enabled: h.teams.enabled !== false, max: h.teams.max || 4 }; P_.team.hidden = !teamsCfg.enabled; }
       const mode = panel.querySelector('.tp-mode');
-      if (mode) { mode.hidden = false; mode.textContent = 'LIVE · ' + (h.backend === 'anthropic-sdk' ? 'CLAUDE API' : 'CLAUDE'); mode.classList.add('live'); mode.title = `${h.name} · ${h.backend} · ${modelName(h.model)} by default · brain: ${h.brain}`; }
+      if (mode) { mode.hidden = false; mode.textContent = 'LIVE · RAY RELAY'; mode.classList.add('live'); mode.title = `${h.name} · tasks and messages relay to Ray's inbox · brain: ${h.brain}`; }
       if (brain) { try { brain.setGraph(await (await fetch(API + '/brain')).json()); } catch {} }
       const list = await (await fetch(API + '/tasks')).json();
       for (const st of list) {
@@ -685,6 +639,10 @@ export function initTasks(ctx) {
           deliver(t);
         } else reconcile(st); // next, doing (the server may be running it), waiting for your OK, scheduled for a date — pick it up again
       }
+      // the server is the truth now: drop every seeded demo task and its fake
+      // history/counts — the board shows only what the server actually sent
+      for (let i = tasks.length - 1; i >= 0; i--) if (!tasks[i].live) tasks.splice(i, 1);
+      for (const k of DEPT_KEYS) doneCount[k] = tasks.filter(t => t.live && t.state === 'done' && t.dept === k).length;
       dirty = true;
       if (onLive) onLive(h);
       await poll(); setInterval(poll, 6000); // V3.5: routines fire on the server's clock — the page keeps up
@@ -693,7 +651,7 @@ export function initTasks(ctx) {
   connect();
   function addTask(agentId, title, by = 'you') {
     if (agentTasks(agentId, 'next').length >= 5) return null;
-    const t = mk({ agent: agentId, title, by });
+    const t = mk({ agent: agentId, title, by, ageBase: Date.now() }); // added on this device, just now — real
     touch(t, 'added');
     spawnEmote(R[agentId], '📋');
     return t;
@@ -718,36 +676,37 @@ export function initTasks(ctx) {
     switch (t.state) {
       case 'next': {
         const src = t.piece ? `team piece from ${agentOf(t.leadId)?.name || 'the lead'}` : t.routine ? `routine · ${t.when}${t.late ? ' · <span class="tp-late">late · was due ' + timeStr(t.due) + '</span>' : ''}` : t.by === 'you' ? (t.live ? 'added by you · live' : 'added by you') : t.last === 'handoff' && t.from ? `from ${agentOf(t.from).name}` : t.revised ? 'sent back to revise' : 'from the Brain';
-        const w = now - t.addedAt;
-        return `${who} · ${w < 60000 ? 'just added' : 'waiting ' + span(w)} · ${src}${teamBit(t)}${modelBit(t)}`;
+        const ago = agoText(t);
+        return `${who}${ago ? ` · ${ago === 'just now' ? 'just added' : 'waiting ' + ago}` : ''} · ${src}${teamBit(t)}${modelBit(t)}`;
       }
-      case 'doing': return `${who}${t.live ? (t.approved === undefined && t.draftAt ? ' · sending with Claude' : t.team?.members?.length ? ' · leading the team with Claude' : ' · working with Claude') : t.agent === 'vid' ? ' · rendering' : t.teamHold ? ' · waiting on the pieces' : ''}${t.routine ? ' · routine' : ''}${teamBit(t)}${modelBit(t)}`;
-      case 'waiting': return `<span class="tp-amber">waiting ${span(now - t.changedAt)} for your tick</span> · ${who}${t.routine ? ' · routine draft' : ''}${teamBit(t)}${modelBit(t)}`;
+      case 'doing': return `${who}${t.live ? (t.approved === undefined && t.draftAt ? ' · sending to Ray' : t.team?.members?.length ? ' · leading the team' : ' · working — Ray has it in chat') : t.agent === 'vid' ? ' · rendering' : t.teamHold ? ' · waiting on the pieces' : ''}${t.routine ? ' · routine' : ''}${teamBit(t)}${modelBit(t)}`;
+      case 'waiting': { const ago = agoText(t); return `<span class="tp-amber">waiting${ago ? ` ${ago}` : ''} for your tick</span> · ${who}${t.routine ? ' · routine draft' : ''}${teamBit(t)}${modelBit(t)}`; }
       case 'scheduled': return `${who} · runs ${esc(untilText(t.dueAt))} · ${new Date(t.dueAt).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} ${timeStr(t.dueAt)}${t.needsOk ? ' · waits for your OK' : ''}${teamBit(t)}${modelBit(t)}`;
-      case 'done': return `${who} · done ${timeStr(t.doneAt)}${t.approved ? (t.live ? ' · sent after your OK' : ' · approved') : ''}${t.late ? ' · <span class="tp-late">ran late</span>' : ''}${teamBit(t)}${modelBit(t)}${t.live ? (t.error ? ' · <span class="tp-amber">failed</span>' : ' · <span class="tp-res">result ready →</span>') : ''}`;
+      case 'done': return `${who}${t.doneAt ? ` · done ${timeStr(t.doneAt)}` : ''}${t.approved ? (t.live ? ' · sent after your OK' : ' · approved') : ''}${t.late ? ' · <span class="tp-late">ran late</span>' : ''}${teamBit(t)}${modelBit(t)}${t.live ? (t.error ? ' · <span class="tp-amber">failed</span>' : ' · <span class="tp-res">result ready →</span>') : ''}`;
     }
     return who;
   }
   function rowHTMLp(t) {
-    const pct = Math.round(t.progress * 100);
-    const chip = `<span class="tp-st ${t.state}">${t.state === 'doing' ? `<span data-pct="${t.id}">${pct}%</span>` : t.state === 'scheduled' ? '◷' : STATE_LABEL[t.state]}</span>`;
-    const bar = t.state === 'doing' ? `<div class="tp-bar"><i data-bar="${t.id}" style="width:${pct}%"></i></div>` : t.state === 'scheduled' ? `<div class="tp-act"><button data-act="cancel">CANCEL</button><button data-act="calendar">CALENDAR</button></div>` : '';
+    // state chips carry no percentage — there is no genuinely measurable fraction, so none is shown
+    const chip = `<span class="tp-st ${t.state}">${t.state === 'scheduled' ? '◷' : STATE_LABEL[t.state]}</span>`;
+    const bar = t.state === 'scheduled' ? `<div class="tp-act"><button data-act="cancel">CANCEL</button><button data-act="calendar">CALENDAR</button></div>` : '';
+    const ago = agoText(t);
     return `<div class="tp-row ${t.state}${t.last === 'handoff' ? ' handoff' : ''}${t.live ? ' live' : ''}${t.piece ? ' piece' : ''}" data-id="${t.id}" data-dept="${t.dept}" data-agent="${t.agent}">
       ${chip}<div class="tp-body"><div class="tp-t">${t.routine || t.state === 'scheduled' ? '⏱ ' : ''}${t.team?.members?.length ? '⚑ ' : ''}${esc(t.title)}</div><div class="tp-m">${metaFor(t)}</div>${bar}</div>
-      <span class="tp-ago" data-ago="${t.id}">${span(Date.now() - t.changedAt)}</span></div>`;
+      ${ago ? `<span class="tp-ago" data-ago="${t.id}">${ago}</span>` : `<span class="tp-ago" data-ago="${t.id}"></span>`}</div>`;
   }
-  function rowHTMLr(r) { // a SCHEDULED row: the routine itself, with its countdown and its buttons
+  function rowHTMLr(r) { // a SCHEDULED row: the routine itself, with its next-run label and its buttons
     const a = agentOf(r.agent);
     return `<div class="tp-row sched${r.paused ? ' paused' : ''}" data-id="r:${r.id}" data-rid="${r.id}" data-dept="${r.dept}" data-agent="${r.agent}">
       <span class="tp-st sched">⏱</span>
-      <div class="tp-body"><div class="tp-t">${esc(r.title)}</div><div class="tp-m">${esc(r.desc)} · ${a.name} · ${modelName(r.model || officeModel)}${r.needsOk ? ' · waits for your OK' : ' · read-only'}${r.lastAt ? ' · last ' + timeStr(r.lastAt) + (r.lastLate ? ' <span class="tp-late">late</span>' : '') : ''}</div>
+      <div class="tp-body"><div class="tp-t">${esc(r.title)}</div><div class="tp-m">${esc(r.desc)} · ${a.name}${r.needsOk ? ' · waits for your OK' : ' · read-only'}${r.lastAt ? ' · last ' + timeStr(r.lastAt) + (r.lastLate ? ' <span class="tp-late">late</span>' : '') : ''}</div>
       <div class="tp-act"><button class="run" data-act="run">RUN NOW</button><button data-act="${r.paused ? 'resume' : 'pause'}">${r.paused ? 'RESUME' : 'PAUSE'}</button><button data-act="delete">DELETE</button></div></div>
-      <span class="tp-ago" data-rago="${r.id}">${r.paused ? 'PAUSED' : esc(untilText(r.nextAt))}</span></div>`;
+      <span class="tp-ago" data-rago="${r.id}">${r.paused ? 'PAUSED' : esc(routineWhen(r))}</span></div>`;
   }
   function renderNext() { // C1: the next-up strip under the chips
     const n = nextOf(scopedRoutines());
     P_.next.hidden = !n;
-    if (n) P_.next.innerHTML = `<span class="lab">NEXT ⏱</span><span class="nx">${esc(untilText(n.nextAt))}</span><span class="tt">${esc(n.title)} · ${agentOf(n.agent).name}</span>`;
+    if (n) P_.next.innerHTML = `<span class="lab">NEXT ⏱</span><span class="nx">${esc(routineWhen(n))}</span><span class="tt">${esc(n.title)} · ${agentOf(n.agent).name}</span>`;
   }
   function rects() {
     const m = {};
@@ -781,30 +740,25 @@ export function initTasks(ctx) {
     P_.rows.querySelectorAll('.tp-row.live.done').forEach(n => n.addEventListener('click', () => openAgent && openAgent(n.dataset.agent, 'chat')));
     if (!structural) flip(before);
   }
-  function refreshBars() {
-    for (const t of tasks) {
-      if (t.state !== 'doing') continue;
-      const bar = P_.rows.querySelector(`[data-bar="${t.id}"]`);
-      if (!bar) continue;
-      const pct = Math.round(t.progress * 100);
-      bar.style.width = pct + '%';
-      const p = P_.rows.querySelector(`[data-pct="${t.id}"]`);
-      if (p) p.textContent = pct + '%';
-    }
-  }
   function refreshAgo() {
-    const now = Date.now();
     for (const t of tasks) {
       const el = P_.rows.querySelector(`[data-ago="${t.id}"]`);
-      if (el) el.textContent = span(now - t.changedAt);
+      if (el) el.textContent = agoText(t); // '' when the task carries no real timestamp — never a made-up age
     }
-    for (const r of routines) { const el = P_.rows.querySelector(`[data-rago="${r.id}"]`); if (el) el.textContent = r.paused ? 'PAUSED' : untilText(r.nextAt, now); }
+    for (const r of routines) { const el = P_.rows.querySelector(`[data-rago="${r.id}"]`); if (el) el.textContent = r.paused ? 'PAUSED' : routineWhen(r); }
     renderNext();
     // waiting / backlog metas carry a duration too — cheap to re-render those lines
     P_.rows.querySelectorAll('.tp-row.waiting .tp-m, .tp-row.next .tp-m').forEach(m => {
       const t = tasks.find(x => x.id === +m.closest('.tp-row').dataset.id);
       if (t) m.innerHTML = metaFor(t);
     });
+  }
+  // a routine's next-run label: a live countdown when we hold a real timestamp,
+  // otherwise the server's own "next run Wed 11:00" label — never a guess
+  function routineWhen(r) {
+    if (r.nextAt) return untilText(r.nextAt);
+    const lbl = (r.nextRun && r.nextRun !== '—') ? r.nextRun : '';
+    return lbl ? `next run ${lbl}` : 'on schedule';
   }
   setDept('marketing');
   render(true);
@@ -815,29 +769,27 @@ export function initTasks(ctx) {
   dim.addEventListener('click', close);
   function cardHTML(t) {
     const a = agentOf(t.agent), chip = DEPTS[t.dept].chip;
-    const pct = Math.round(t.progress * 100);
     const av = `<span class="tk-av" style="border-color:${chip};background:${chip}55">${a.name[0]}</span>`;
+    const ago = agoText(t);
     let meta;
-    if (t.state === 'done') meta = `<span class="tk-tick">✓</span><span>${a.name}</span><span class="tk-pct">${t.approved ? 'APPROVED · ' : ''}${t.modelUsed ? modelName(t.modelUsed).toUpperCase() + ' · ' : ''}${timeStr(t.doneAt)}</span>`;
-    else if (t.state === 'waiting') meta = `${av}<span>${a.name}</span><span class="tk-chip">WAITING ${span(Date.now() - t.changedAt).toUpperCase()}</span>`;
-    else if (t.state === 'doing') meta = `${av}<span>${a.name}</span><span class="tk-pct" data-pct="${t.id}">${t.agent === 'vid' ? 'RENDER · ' : ''}${pct}%</span>`;
+    if (t.state === 'done') meta = `<span class="tk-tick">✓</span><span>${a.name}</span>${t.doneAt ? `<span class="tk-pct">${t.approved ? 'APPROVED · ' : ''}${timeStr(t.doneAt)}</span>` : ''}`;
+    else if (t.state === 'waiting') meta = `${av}<span>${a.name}</span><span class="tk-chip">WAITING${ago ? ` ${ago.toUpperCase()}` : ''}</span>`;
+    else if (t.state === 'doing') meta = `${av}<span>${a.name}</span><span class="tk-pct">${t.agent === 'vid' ? 'RENDERING' : 'IN PROGRESS'}</span>`;
     else if (t.state === 'scheduled') meta = `${av}<span>${a.name}</span><span class="tk-pct">${esc(untilText(t.dueAt).toUpperCase())}</span>`;
-    else meta = `${av}<span>${a.name}</span><span class="tk-pct">${span(Date.now() - t.addedAt).toUpperCase()} IN BACKLOG</span>`;
+    else meta = `${av}<span>${a.name}</span><span class="tk-pct">${ago ? ago.toUpperCase() + ' IN BACKLOG' : 'IN BACKLOG'}</span>`;
     return `<div class="tk ${t.state === 'scheduled' ? 'sched scheduled' : t.state}${t.revised ? ' rev' : ''}" data-id="${t.id}" data-dept="${t.dept}">
-      <div class="tk-t">${t.routine || t.state === 'scheduled' ? '⏱ ' : ''}${t.team?.members?.length ? '⚑ ' : t.piece ? '↳ ' : ''}${esc(t.title)}</div><div class="tk-m">${meta}</div>
-      ${t.state === 'doing' ? `<div class="tk-bar"><i data-bar="${t.id}" style="width:${pct}%"></i></div>` : ''}</div>`;
+      <div class="tk-t">${t.routine || t.state === 'scheduled' ? '⏱ ' : ''}${t.team?.members?.length ? '⚑ ' : t.piece ? '↳ ' : ''}${esc(t.title)}</div><div class="tk-m">${meta}</div></div>`;
   }
   const byState = (k, st) => {
     const l = deptTasks(k, st);
-    if (st === 'doing') l.sort((a, b) => b.progress - a.progress);
-    else if (st === 'done') l.sort((a, b) => b.doneAt - a.doneAt);
+    if (st === 'done') l.sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
     else l.sort((a, b) => a.id - b.id);
     return l;
   };
   function cardHTMLr(r) { // C1: a SCHEDULED card on the company board
     const a = agentOf(r.agent), chip = DEPTS[r.dept].chip;
     return `<div class="tk sched${r.paused ? ' paused' : ''}" data-rid="${r.id}" data-dept="${r.dept}"><div class="tk-t">⏱ ${esc(r.title)}</div>
-      <div class="tk-m"><span class="tk-av" style="border-color:${chip};background:${chip}55">${a.name[0]}</span><span>${a.name} · ${modelName(r.model || officeModel).toUpperCase()}</span><span class="tk-pct">${r.paused ? 'PAUSED' : esc(untilText(r.nextAt).toUpperCase())}</span></div></div>`;
+      <div class="tk-m"><span class="tk-av" style="border-color:${chip};background:${chip}55">${a.name[0]}</span><span>${a.name}</span><span class="tk-pct">${r.paused ? 'PAUSED' : esc(untilText(r.nextAt).toUpperCase())}</span></div></div>`;
   }
   const COLS = [['sched', 'SCHEDULED'], ['next', 'BACKLOG'], ['doing', 'IN PROGRESS'], ['waiting', 'WAITING ON APPROVAL'], ['done', 'DONE']];
   function companyHTML() {
@@ -845,7 +797,7 @@ export function initTasks(ctx) {
     const doneAll = DEPT_KEYS.reduce((s, k) => s + doneCount[k], 0);
     return `<div class="bd-head">
         <span class="b-name"><span class="bd-title">Agents Office</span>Today's board</span>
-        <span class="bd-stats"><span>SCHEDULED<b>${routines.length + tot('scheduled')}</b></span><span>IN PROGRESS<b>${tot('doing')}</b></span><span>BACKLOG<b>${tot('next')}</b></span><span>WAITING<b>${tot('waiting')}</b></span><span>DONE<b>${doneAll}</b></span></span></div>
+        <span class="bd-stats"><span>SCHEDULED<b>${routines.length + tot('scheduled')}</b></span><span>IN PROGRESS<b>${tot('doing')}</b></span><span>BACKLOG<b>${tot('next')}</b></span><span>WAITING<b>${tot('waiting')}</b></span><span>DONE<b>${doneAll}</b></span></span><button class=\"bd-x\" title=\"close (Esc)\">✕</button></div>
       <div class="bd-lanes"><div class="lh"></div>${COLS.map(([, lab]) => `<div class="lh">${lab}</div>`).join('')}
       ${DEPT_KEYS.map(k => {
         const d = DEPTS[k], n = AGENTS.filter(a => a.dept === k).length;
@@ -859,6 +811,7 @@ export function initTasks(ctx) {
   function renderBoard() {
     if (!board.open) return;
     el.innerHTML = companyHTML();
+    el.querySelector('.bd-x').addEventListener('click', close);
     el.querySelectorAll('.tk.waiting').forEach(n => n.addEventListener('click', () => { close(); zoomToApproval(n.dataset.dept); }));
     el.querySelectorAll('.tk.sched').forEach(n => n.addEventListener('click', () => { close(); filter = 'sched'; openFor(n.dataset.dept); render(true); }));
   }
@@ -942,12 +895,12 @@ export function initTasks(ctx) {
       const r = R[id];
       if (r.state === 'stuck') continue;
       const d = agentTasks(id, 'doing')[0];
-      if (d && !d.live && agentTasks(id, 'next').some(t => t.live || t.piece)) { d.progress = 1; complete(d); continue; } // real work (and a team piece) never waits behind theatre
+      if (d && !d.live && agentTasks(id, 'next').some(t => t.live || t.piece)) { complete(d); continue; } // real work (and a team piece) never waits behind theatre
       if (d) {
         if (d.live) {
           if (!d.running) runLive(d);
-          if (d.ready) { d.progress = 1; complete(d); }
-          else d.progress = Math.min(0.92, (now - (d.startedAt || now)) / 45000);
+          if (d.ready) complete(d);
+          // no timer-based progress for live work: there is no measurable fraction, so the card shows the Doing state with no bar
         } else if (d.teamHold) { // demo lead: the card fills as the pieces come in, finishes when the last one lands
           const ps = tasks.filter(x => x.parent === d.id);
           d.progress = ps.length ? Math.min(0.96, ps.reduce((s, p) => s + (p.state === 'done' ? 1 : p.progress || 0), 0) / ps.length) : Math.min(0.5, (now - d.startedAt) / d.dur);
@@ -966,7 +919,6 @@ export function initTasks(ctx) {
     if (now - lastBadge > 400) { syncBadges(); lastBadge = now; }
     if (dirty) { render(false); renderBoard(); dirty = false; }
     else {
-      if (now - lastBar > 250) { refreshBars(); lastBar = now; }
       if (now - lastAgo > 15000) { refreshAgo(); lastAgo = now; }
     }
   }
@@ -976,16 +928,16 @@ export function initTasks(ctx) {
     if (!(at > Date.now())) return { ok: false, error: 'Pick a time that is still ahead.' };
     if (live) {
       try {
-        const r = await fetch(API + '/tasks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dept: k, text, at, model: normModel(model) || undefined, team: asTeam(text) || undefined }) });
+        const r = await fetch(API + '/tasks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dept: k, text, at, team: asTeam(text) || undefined }) });
         const st = await r.json(); if (!r.ok) throw new Error(st.error || r.statusText);
-        const t = mk({ agent: st.agent, title: st.title, text: st.text, plan: st.plan, why: st.why, by: 'you', live: true, sid: st.id, state: 'scheduled', dueAt: st.dueAt, needsOk: !!st.needsOk, model: st.model, modelUsed: st.model || officeModel, modelFrom: st.model ? 'task' : 'office', team: st.team ? { lead: st.team.lead, members: [] } : undefined });
+        const t = mk({ agent: st.agent, title: st.title, text: st.text, plan: st.plan, why: st.why, by: 'you', live: true, sid: st.id, state: 'scheduled', dueAt: st.dueAt, needsOk: !!st.needsOk, model: st.model, modelUsed: st.model || officeModel, modelFrom: st.model ? 'task' : 'office', team: st.team ? { lead: st.team.lead, members: [] } : undefined, ageBase: Date.now() });
         touch(t, 'scheduled'); spawnEmote(R[t.agent], '⏱'); feedPush(R[t.agent], '⏱', `Scheduled for ${new Date(at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}: ${t.title}`);
         return { ok: true, task: t };
       } catch (e) { return { ok: false, error: e.message }; }
     }
     const { agent: a } = route(k, text);
     const title = (text.charAt(0).toUpperCase() + text.slice(1)).slice(0, 90);
-    const t = mk({ agent: a.id, title, text, by: 'you', state: 'scheduled', dueAt: at, needsOk: guessOk(text), modelUsed: normModel(model) || officeModel, modelFrom: model ? 'task' : 'office' });
+    const t = mk({ agent: a.id, title, text, by: 'you', state: 'scheduled', dueAt: at, needsOk: guessOk(text), modelUsed: officeModel, modelFrom: 'office', ageBase: Date.now() });
     touch(t, 'scheduled'); spawnEmote(R[a.id], '⏱'); feedPush(R[a.id], '⏱', `Scheduled for ${new Date(at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}: ${title}`);
     return { ok: true, task: t };
   }
@@ -993,7 +945,7 @@ export function initTasks(ctx) {
     if (!RT_DEPTS.includes(k)) return { ok: false, error: rtRefuse(k) };
     if (live) {
       try {
-        const r = await fetch(API + '/routines', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dept: k, text, when, needsOk, model: normModel(model) || undefined }) });
+        const r = await fetch(API + '/routines', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dept: k, text, when, needsOk }) });
         const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText);
         setRoutines([...routines.filter(x => x.id !== j.routine.id), j.routine]);
         const a = agentOf(j.routine.agent); spawnEmote(R[a.id], '⏱'); feedPush(R[a.id], '⏱', `New routine: ${j.routine.title} (${j.routine.desc})`);
@@ -1001,7 +953,7 @@ export function initTasks(ctx) {
       } catch (e) { return { ok: false, error: e.message }; }
     }
     const { agent: a } = route(k, text);
-    const r = addRoutine(k, a.id, text, when, needsOk); r.model = normModel(model) || undefined;
+    const r = addRoutine(k, a.id, text, when, needsOk); r.model = undefined;
     spawnEmote(R[a.id], '⏱'); feedPush(R[a.id], '⏱', `New routine: ${r.title} (${r.desc})`);
     return { ok: true, routine: r };
   }
@@ -1011,7 +963,7 @@ export function initTasks(ctx) {
     tasks.splice(tasks.indexOf(t), 1); dirty = true; feedPush(R[t.agent], '✕', `Cancelled: ${t.title}`);
     return true;
   }
-  const calendar = initCalendar({ tasks, routines, agentOf, DEPTS, DEPT_KEYS, RT_DEPTS, rtRefuse, create: createScheduled, createRoutine: createRoutineAt, cancelTask: cancelScheduled, rtAct, openAgent: (id, tab) => openAgent && openAgent(id, tab), esc, isLive: () => live, officeModel: () => officeModel, MODEL_KEYS, modelName, business: () => document.title.replace(/ — Agents Office$/, ''), currentDept: () => dept });
+  const calendar = initCalendar({ tasks, routines, agentOf, DEPTS, DEPT_KEYS, RT_DEPTS, rtRefuse, create: createScheduled, createRoutine: createRoutineAt, cancelTask: cancelScheduled, rtAct, openAgent: (id, tab) => openAgent && openAgent(id, tab), esc, isLive: () => live, officeModel: () => officeModel, business: () => document.title.replace(/ — (Agents|Ray) Office$/, ''), currentDept: () => dept });
   return { tick, toggle, open, close, openFor, isOpen, boardWidth, onFocusChange, onStuck, onResolve, calendar, createScheduled, cancelScheduled,
            handleChat, addTask, revise, rowHTML, setDept, tasks, panelWidth: () => panel.offsetWidth, isLive: () => live,
            routines, addRoutine, rtAct, railFor, syncPills, refresh: poll, resolveLive, pendingReject, rejectLive, officeModel: () => officeModel, chosenModel, chosenEffort };

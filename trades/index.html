@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ray Terminal · Trades</title>
+<style>
+:root{--bg:#0D0D0F;--panel:#141416;--panel2:#1A1A1D;--amber:#FFA028;--txt:#E8E6E3;--dim:#8A877F;--line:#232326;--pos:#3ddc84;--neg:#ff5f56}
+*{margin:0;padding:0;box-sizing:border-box}html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--txt);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;min-height:100vh;display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+.num{font-variant-numeric:tabular-nums}
+.pos{color:var(--pos)}.neg{color:var(--neg)}
+.hdr{border-bottom:1px solid var(--line);flex:none;background:var(--bg);z-index:5}
+.tabbar{flex:none;display:flex;border-bottom:1px solid var(--line);background:var(--bg)}
+.tab{flex:1;background:none;border:0;color:var(--dim);font-family:inherit;font-size:15px;letter-spacing:1.5px;padding:16px 0;cursor:pointer;border-bottom:2px solid transparent}
+.tab.on{color:var(--amber);border-bottom-color:var(--amber)}
+main.viewport{flex:1;overflow:hidden;max-width:720px;width:100%;margin:0 auto}
+.track{display:flex;height:100%;transition:transform .32s cubic-bezier(.2,.7,.3,1)}
+.panel{flex:0 0 100%;overflow-y:auto;padding:20px 16px 60px;-webkit-overflow-scrolling:touch}
+.statbar{display:flex;align-items:center;gap:10px;padding:10px 16px;font-size:11px;letter-spacing:2px;color:var(--dim)}
+.live{display:flex;align-items:center;gap:6px;color:var(--pos);font-weight:700}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--pos);animation:blink 1.6s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.statbar .sp{flex:1}
+.nav{display:flex;border-top:1px solid var(--line)}
+.nav a{flex:1;text-align:center;padding:12px 0;font-size:12px;letter-spacing:2px;color:var(--dim);text-decoration:none;border-bottom:2px solid transparent}
+.nav a.on{color:var(--amber);border-bottom-color:var(--amber)}
+.tape{overflow:hidden;border-top:1px solid var(--line);white-space:nowrap;font-size:11px;color:var(--dim);padding:8px 0}
+.tape-track{display:inline-block;animation:tape 28s linear infinite;will-change:transform}
+@keyframes tape{to{transform:translateX(-50%)}}
+.tape .sep{color:var(--amber);margin:0 10px}
+.sec{font-size:11px;letter-spacing:3px;color:var(--amber);margin:26px 0 12px;display:flex;align-items:center;gap:8px}
+.panel .sec:first-child{margin-top:2px}
+.sec::after{content:"";flex:1;height:1px;background:var(--line)}
+.sec .tag{font-size:10px;color:var(--dim);letter-spacing:1px}
+.livedot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--pos);margin-right:5px;animation:blink 1.2s infinite;vertical-align:1px}
+.px-flash{animation:pxf .8s;border-radius:4px}
+@keyframes pxf{0%{background:rgba(255,160,40,.30)}100%{background:transparent}}
+.hero{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px 20px;margin-top:6px}
+.hero .kicker{font-size:10px;letter-spacing:3px;color:var(--dim);margin-bottom:8px}
+.hero .lab{font-size:12px;color:var(--dim);letter-spacing:2px}
+.hero-pnl{font-size:34px;font-weight:700;margin:2px 0 4px;letter-spacing:-1px}
+.hero-sub{font-size:11px;color:var(--dim);line-height:1.6}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card .k{font-size:10px;letter-spacing:2px;color:var(--dim);margin-bottom:6px}
+.card .v{font-size:18px;font-weight:700}
+.card .d{font-size:11px;color:var(--dim);margin-top:4px;line-height:1.5}
+.ov{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:4px 0 14px}
+.ovc{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+.ovc .k{font-size:10px;letter-spacing:2px;color:var(--dim);margin-bottom:6px}
+.ovc .v{font-size:19px;font-weight:700;white-space:nowrap}
+.ovc .d{font-size:11px;color:var(--dim);margin-top:4px;white-space:nowrap}
+.alloc{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.alloc .bar{display:flex;height:10px;border-radius:6px;overflow:hidden;margin:10px 0 8px;background:var(--panel2)}
+.alloc .bar .st{background:var(--amber)}
+.alloc .bar .mf{background:#4da3ff}
+.alloc .lbl{display:flex;justify-content:space-between;font-size:11px;color:var(--dim)}
+.alloc .lbl b{color:var(--txt)}
+.trade{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:12px}
+.trade-head{display:flex;justify-content:space-between;gap:10px;margin-bottom:10px}
+.sym{font-size:17px;font-weight:700;color:var(--amber);letter-spacing:1px}
+.co{font-size:12px;color:var(--dim);margin-top:2px}
+.chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.chip{font-size:10px;border:1px solid var(--line);border-radius:20px;padding:3px 10px;color:var(--dim);letter-spacing:1px}
+.chip.hot{color:var(--pos);border-color:var(--pos)}
+.trade-pnl{text-align:right;font-size:12px;color:var(--dim)}
+.trade-pnl .lp{font-size:21px;font-weight:700;color:var(--txt);display:block;margin:2px 0}
+.rows{border-top:1px solid var(--line)}
+.row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px;gap:8px}
+.row:last-child{border-bottom:0}
+.row .lab{color:var(--dim)}
+.row .val{font-weight:600;text-align:right}
+.row.total .val,.row.total .lab{font-weight:700;font-size:14px}
+.tnote{font-size:12px;color:var(--dim);line-height:1.6;margin-top:10px}
+.tnote strong{color:var(--txt)}
+.mf{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.mf-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.mf-name{font-size:14px;font-weight:700}
+.mf-val{font-size:16px;font-weight:700}
+.mf-rows{margin-top:8px;border-top:1px solid var(--line)}
+.mf-note{font-size:11px;color:var(--dim);margin-top:8px;line-height:1.5}
+.news-item{display:block;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px;text-decoration:none;color:var(--txt)}
+.news-item:active{border-color:var(--amber)}
+.news-item .t{font-size:13px;line-height:1.5;font-weight:600}
+.news-item .m{font-size:11px;color:var(--dim);margin-top:6px}
+.news-src{color:var(--amber)}
+.empty{background:var(--panel);border:1px dashed var(--line);border-radius:10px;padding:24px;text-align:center;color:var(--dim);font-size:13px}
+.err{background:#2a1512;border:1px solid #5a2a22;border-radius:10px;padding:16px;font-size:13px;color:#ffb4ab;margin-bottom:12px}
+.foot{margin-top:30px;font-size:11px;color:var(--dim);line-height:1.8;text-align:center}
+.mkt-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:4px 0 14px}
+.mkt{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.mkt .k{font-size:10px;letter-spacing:1.5px;color:var(--dim);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mkt .v{font-size:17px;font-weight:700;white-space:nowrap}
+.mkt .d{font-size:11.5px;margin-top:3px}
+.mkt .spark{width:100%;height:30px;display:block;margin-top:8px}
+.foot .snap{color:var(--amber)}
+.chart-wrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:12px}
+.tf-row{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tf{background:var(--panel2);border:1px solid var(--line);color:var(--dim);font-family:inherit;font-size:11px;letter-spacing:1px;border-radius:16px;padding:5px 13px;cursor:pointer}
+.tf.on{color:var(--amber);border-color:var(--amber)}
+#chart{width:100%;height:auto;display:block}
+.ch-legend{display:flex;gap:14px;margin-top:10px;font-size:11px;color:var(--dim);flex-wrap:wrap}
+.ch-legend .sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}
+.vsn{display:flex;gap:10px;margin:12px 0 4px}
+.vsn-col{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0}
+.vsn-col .k{font-size:10px;letter-spacing:2px;color:var(--dim);margin-bottom:4px}
+.vsn-col .v{font-size:20px;font-weight:700;white-space:nowrap}
+.vsn-mid{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 16px}
+.vsn-mid .k{font-size:10px;letter-spacing:2px;color:var(--dim)}
+.vsn-mid .v{font-size:15px;font-weight:700;white-space:nowrap}
+.vsn-note{font-size:10px;color:var(--dim);letter-spacing:1px;margin-top:10px}
+.mkt.held{border-color:rgba(255,160,40,.5)}
+.held-tag{display:inline-block;font-size:9px;letter-spacing:1.5px;color:var(--amber);border:1px solid rgba(255,160,40,.55);border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:1px}
+.chart-wrap{position:relative}
+#chart-tip{position:absolute;pointer-events:none;background:#1E1E22;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:11px;line-height:1.7;display:none;z-index:5;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.5)}
+#chart-tip .tt{color:var(--dim);font-size:10px;letter-spacing:1px;margin-bottom:2px}
+.rangebar{height:6px;border-radius:4px;background:var(--panel2);position:relative;margin:8px 0 4px}
+.rangebar .fill{position:absolute;top:0;bottom:0;background:var(--amber);border-radius:4px;opacity:.85}
+.rangebar .mark{position:absolute;top:-3px;width:2px;height:12px;background:var(--txt)}
+.rangelbl{display:flex;justify-content:space-between;font-size:10px;color:var(--dim)}
+@media(min-width:600px){.hero-pnl{font-size:44px}}
+/* ---------- desktop: turn the phone layout into a terminal wall ---------- */
+@media(min-width:1024px){
+  main.viewport{max-width:1280px}
+  .panel{padding:28px 32px 90px}
+  .tab{font-size:16px;padding:18px 0}
+  .tape{font-size:12px}
+  .hero{padding:30px 32px}
+  .hero-pnl{font-size:56px}
+  .cards{grid-template-columns:repeat(4,1fr);gap:12px}
+  .card .v{font-size:21px}
+  .ov{grid-template-columns:repeat(4,1fr);gap:12px}
+  .ovc .v{font-size:21px}
+  #open{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+  #open .trade{margin-bottom:0}
+  #mfs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:start}
+  #mfs .mf{margin-bottom:0}
+  #closed{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+  #closed .trade{margin-bottom:0}
+  #news{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start}
+  #news .news-item{margin-bottom:0}
+  .alloc{max-width:640px}
+  .mkt-grid{grid-template-columns:repeat(4,1fr);gap:12px}
+  .sec{margin:32px 0 14px}
+}
+</style>
+</head>
+<body>
+<header class="hdr">
+  <div class="statbar">
+    <span class="live"><span class="dot"></span>LIVE</span>
+    <span>RAY TERMINAL</span><span class="sp"></span>
+  </div>
+  <nav class="nav">
+    <a href="/">FLAT</a><a href="/office/">OFFICE</a><a href="/brain/">BRAIN</a><a href="/trades/" class="on">TRADES</a>
+  </nav>
+  <div class="tape"><div class="tape-track"><span id="tapeA"></span><span id="tapeB" aria-hidden="true"></span></div></div>
+</header>
+<div class="tabbar">
+  <button class="tab on" data-i="0">OVERVIEW</button>
+  <button class="tab" data-i="1">STOCKS</button>
+  <button class="tab" data-i="2">MUTUAL FUNDS</button>
+  <button class="tab" data-i="3">MARKETS</button>
+</div>
+<main class="viewport">
+<div class="track" id="track">
+<section class="panel" id="panel-0">
+  <section class="hero">
+    <div class="kicker">PORTFOLIO · <span id="asof">—</span></div>
+    <div class="lab">TOTAL P&amp;L · REALISED + UNREALISED</div>
+    <div class="hero-pnl num" id="hero-pnl">—</div>
+    <div class="hero-sub" id="hero-sub">connecting…</div>
+  </section>
+
+  <div class="sec">SESSION CHART <span class="tag" id="ch-tag"></span></div>
+  <div class="chart-wrap">
+    <div class="tf-row" id="tf-row">
+      <button type="button" class="tf on" data-tf="1D">1D</button>
+      <button type="button" class="tf" data-tf="5D">5D</button>
+      <button type="button" class="tf" data-tf="1M">1M</button>
+      <button type="button" class="tf" data-tf="3M">3M</button>
+      <button type="button" class="tf" data-tf="6M">6M</button>
+      <button type="button" class="tf" data-tf="YTD">YTD</button>
+      <button type="button" class="tf" data-tf="1Y">1Y</button>
+      <button type="button" class="tf" data-tf="2Y">2Y</button>
+      <button type="button" class="tf" data-tf="5Y">5Y</button>
+    </div>
+    <div class="vsn">
+      <div class="vsn-col"><div class="k">YOU · PORTFOLIO</div><div class="v num" id="vsn-you">—</div></div>
+      <div class="vsn-mid"><div class="k">VS</div><div class="v num" id="vsn-diff">—</div></div>
+      <div class="vsn-col"><div class="k">NIFTY 50</div><div class="v num" id="vsn-nifty">—</div></div>
+    </div>
+    <svg id="chart" viewBox="0 0 600 200" preserveAspectRatio="xMidYMid meet" role="img" aria-label="price chart"></svg>
+    <div class="ch-legend" id="ch-legend"></div>
+    <div class="vsn-note">today's portfolio, backtested · <span id="vsn-tf">1D</span> · % change since period start</div>
+  </div>
+
+  <div class="cards" id="summary"></div>
+  <div class="alloc" id="alloc" hidden>
+    <div class="k" style="font-size:10px;letter-spacing:2px;color:var(--dim)">ALLOCATION</div>
+    <div class="bar"><div class="st" id="alloc-st" style="width:50%"></div><div class="mf" id="alloc-mf" style="width:50%"></div></div>
+    <div class="lbl"><span>◼ Stocks <b class="num" id="alloc-st-t"></b></span><span>◼ Mutual funds <b class="num" id="alloc-mf-t"></b></span></div>
+  </div>
+
+  <div class="sec">BY THE NUMBERS</div>
+  <div class="cards" id="stats"></div>
+
+  <div class="sec">NEWS <span class="tag">auto</span></div>
+  <div id="news"></div>
+
+  <div class="foot">
+    Stocks: live NSE quotes, refresh ~3s in market hours · Funds: latest published NAV (declared nightly)<br>
+    Manual trading only. SIPs ₹3,800/mo untouched — the compounding engine; the stock sleeve is experimental money.<br>
+    <span class="snap" id="snap"></span>
+  </div>
+</section>
+<section class="panel" id="panel-1">
+  <div class="ov" id="ov-stocks"></div>
+  <div class="sec">OPEN POSITIONS <span class="tag" id="q-age"></span></div>
+  <div id="open"></div>
+
+  <div class="sec">CLOSED TRADES</div>
+  <div id="closed"></div>
+</section>
+<section class="panel" id="panel-2">
+  <div class="ov" id="ov-funds"></div>
+  <div class="sec">MUTUAL FUNDS <span class="tag" id="nav-age"></span></div>
+  <div id="mfs"></div>
+</section>
+<section class="panel" id="panel-3">
+  <div class="sec">YOUR HOLDINGS <span class="tag">live</span></div>
+  <div class="mkt-grid" id="mkt-hold"></div>
+  <div class="sec">INDIA · INDICES <span class="tag">live</span></div>
+  <div class="mkt-grid" id="mkt-idx"></div>
+  <div class="sec">INDIA · VIX &amp; IT <span class="tag">live</span></div>
+  <div class="mkt-grid" id="mkt-vol"></div>
+  <div class="sec">INDIA · GOLD &amp; SILVER ₹ <span class="tag">live</span></div>
+  <div class="mkt-grid" id="mkt-pm"></div>
+  <div class="foot">quotes via Yahoo Finance · refreshes every minute</div>
+</section>
+</div>
+</main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const inr = (n, dec=2) => (n < 0 ? '−₹' : '₹') + Math.abs(n).toLocaleString('en-IN',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+const sgn = n => (n > 0 ? '+' : n < 0 ? '−' : '') + '₹' + Math.abs(n).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const glyph = n => n > 0 ? '▲' : n < 0 ? '▼' : '▪';
+const cls = n => n > 0 ? 'pos' : n < 0 ? 'neg' : '';
+const px = n => '₹' + Number(n).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const pct = n => (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(2) + '%';
+const dstr = iso => { const d = new Date(iso + 'T00:00:00'); return isNaN(d) ? iso : d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}); };
+const ago = ts => { const s = Math.max(0, (Date.now() - ts) / 1000); if (s < 60) return Math.floor(s) + 's ago'; if (s < 3600) return Math.floor(s/60) + 'm ago'; return Math.floor(s/3600) + 'h ago'; };
+
+let D = null, QUOTES = {}, NAVS = {}, prevPx = {}, lastQ = 0, lastTape = '';
+const qmap = s => QUOTES[s.yahoo];
+
+function rangeHTML(lo, hi, cur, buy){
+  if (lo == null || hi == null || cur == null || hi <= lo) return '';
+  const pCur = Math.min(100, Math.max(0, (cur - lo) / (hi - lo) * 100));
+  const pBuy = buy != null ? Math.min(100, Math.max(0, (buy - lo) / (hi - lo) * 100)) : null;
+  return `<div class="rangebar"><div class="fill" style="left:0;width:${pCur}%"></div>` +
+    (pBuy != null ? `<div class="mark" style="left:${pBuy}%" title="your buy"></div>` : '') +
+    `</div><div class="rangelbl"><span>52w low ${px(lo)}</span><span>52w high ${px(hi)}</span></div>`;
+}
+
+function openCard(t){
+  const q = qmap(t);
+  const live = q && q.price != null ? q.price : null;
+  const cost = t.buy_price * t.qty;
+  const mv = live != null ? live * t.qty : null;
+  const upl = mv != null ? mv - cost : null;
+  const uplPct = upl != null ? upl / cost * 100 : null;
+  const stopPx = t.buy_price * (1 + t.stop_pct / 100);
+  const stopDist = live != null ? (live - stopPx) / live * 100 : null;
+  const dayPnl = q && q.change != null ? q.change * t.qty : null;
+  return `<article class="trade" data-sym="${esc(t.symbol)}">
+    <div class="trade-head">
+      <div><div class="sym">${esc(t.symbol)}</div><div class="co">${esc(t.company)}</div>
+      <div class="chips"><span class="chip">${esc(t.exchange)}</span><span class="chip hot">open</span><span class="chip">${t.qty} × ${px(t.buy_price)}</span></div></div>
+      <div class="trade-pnl"><small>live</small><span class="lp num" data-lp>${live != null ? px(live) : '—'}</span>
+      <span class="${cls(q ? q.change : 0)} num">${q ? glyph(q.change) + ' ' + pct(q.change_pct) : ''}</span></div>
+    </div>
+    <div class="rows">
+      <div class="row total"><span class="lab"><b>Unrealised P&amp;L</b></span><span class="val num ${cls(upl)}">${upl != null ? glyph(upl) + ' ' + sgn(upl) + ' (' + pct(uplPct) + ')' : '—'}</span></div>
+      <div class="row"><span class="lab">Today's move</span><span class="val num ${cls(dayPnl)}">${dayPnl != null ? glyph(dayPnl) + ' ' + sgn(dayPnl) : '—'}</span></div>
+      <div class="row"><span class="lab">Day range</span><span class="val num">${q && q.day_low != null ? px(q.day_low) + ' – ' + px(q.day_high) : '—'}</span></div>
+      <div class="row"><span class="lab">Stop ${t.stop_pct}% → ${px(stopPx)}</span><span class="val num ${stopDist != null && stopDist < 3 ? 'neg' : ''}">${stopDist != null ? pct(stopDist) + ' away' : '—'}</span></div>
+    </div>
+    ${q ? rangeHTML(q.w52_low, q.w52_high, live, t.buy_price) : ''}
+    ${t.thesis ? `<p class="tnote"><strong>Thesis.</strong> ${esc(t.thesis)}</p>` : ''}
+  </article>`;
+}
+
+function mfCard(f){
+  const n = NAVS[f.code];
+  const nav = n && n.nav != null ? n.nav : null;
+  const val = nav != null ? f.units * nav : null;
+  const pnl = val != null ? val - f.invested : null;
+  const pnlPct = pnl != null ? pnl / f.invested * 100 : null;
+  const dayPnl = (n && n.prev_nav != null && nav != null) ? f.units * (nav - n.prev_nav) : null;
+  const vsAvg = f.avg_nav != null && nav != null ? (nav - f.avg_nav) / f.avg_nav * 100 : null;
+  return `<div class="mf">
+    <div class="mf-top"><div class="mf-name">${esc(f.name)}</div><div class="mf-val num ${cls(pnl)}">${val != null ? inr(val) : '—'}</div></div>
+    <div class="mf-rows">
+      <div class="row"><span class="lab">NAV ${n && n.date ? '(' + esc(n.date) + ')' : ''}</span><span class="val num">₹${nav != null ? nav.toFixed(4) : '—'}</span></div>
+      <div class="row"><span class="lab">Your avg NAV</span><span class="val num ${cls(vsAvg)}">₹${f.avg_nav != null ? f.avg_nav.toFixed(2) : '—'}${vsAvg != null ? ' · ' + pct(vsAvg) : ''}</span></div>
+      <div class="row"><span class="lab">Units · Invested</span><span class="val num">${f.units} · ${inr(f.invested, 0)}</span></div>
+      <div class="row"><span class="lab">Day change</span><span class="val num ${cls(dayPnl)}">${dayPnl != null ? glyph(dayPnl) + ' ' + sgn(dayPnl) : '—'}</span></div>
+      <div class="row total"><span class="lab"><b>P&amp;L</b></span><span class="val num ${cls(pnl)}">${pnl != null ? glyph(pnl) + ' ' + sgn(pnl) + ' (' + pct(pnlPct) + ')' : '—'}</span></div>
+    </div>
+    ${f.note ? `<div class="mf-note">${esc(f.note)}</div>` : ''}
+  </div>`;
+}
+
+function tradeCard(t){
+  return `<article class="trade">
+    <div class="trade-head">
+      <div><div class="sym">${esc(t.symbol)}</div><div class="co">${esc(t.company)}</div>
+      <div class="chips"><span class="chip">${esc(t.exchange)}</span><span class="chip">closed</span></div></div>
+      <div class="trade-pnl"><small>net P&amp;L</small><span class="lp num ${cls(t.net_pnl)}">${glyph(t.net_pnl)} ${sgn(t.net_pnl)}</span></div>
+    </div>
+    <div class="rows">
+      <div class="row"><span class="lab">Buy ${dstr(t.buy_date)} · ${px(t.buy_price)} × ${t.qty}</span><span class="val num">${inr(t.buy_all_in)}</span></div>
+      <div class="row"><span class="lab">Sell ${dstr(t.sell_date)} · ${px(t.sell_price)} × ${t.qty}</span><span class="val num">${inr(t.sell_net)}</span></div>
+      <div class="row"><span class="lab">Held</span><span class="val num">${t.days_held} day${t.days_held === 1 ? '' : 's'}</span></div>
+    </div>
+    ${t.thesis ? `<p class="tnote"><strong>Thesis.</strong> ${esc(t.thesis)}</p>` : ''}
+    ${t.notes ? `<p class="tnote"><strong>Exit.</strong> ${esc(t.notes)}</p>` : ''}
+  </article>`;
+}
+
+function renderAll(){
+  if (!D) return;
+  const s = D.summary || {};
+  let unreal = 0, invested = 0, dayMove = 0, hasLive = false;
+  (D.open || []).forEach(t => {
+    const q = qmap(t);
+    invested += t.buy_price * t.qty;
+    if (q && q.price != null) { hasLive = true; unreal += (q.price - t.buy_price) * t.qty; dayMove += (q.change || 0) * t.qty; }
+  });
+  let mfVal = 0, mfInv = 0, mfDay = 0, mfLive = false;
+  const mfPerf = [];
+  (D.mutual_funds || []).forEach(f => {
+    const n = NAVS[f.code];
+    mfInv += f.invested;
+    if (n && n.nav != null) {
+      mfLive = true;
+      const v = f.units * n.nav, p = v - f.invested;
+      mfVal += v; mfPerf.push({name: f.name, pct: p / f.invested * 100, pnl: p});
+      if (n.prev_nav != null) mfDay += f.units * (n.nav - n.prev_nav);
+    }
+  });
+  const realised = s.realized_pnl || 0;
+  const mfPnl = mfVal - mfInv;
+  const total = realised + (hasLive ? unreal : 0) + (mfLive ? mfPnl : 0);
+  const hp = $('hero-pnl');
+  hp.className = 'hero-pnl num ' + cls(total);
+  hp.textContent = glyph(total) + ' ' + sgn(total);
+  $('hero-sub').innerHTML = `realised ${sgn(realised)}${s.realized_note ? ' · ' + esc(s.realized_note) : ''}<br>across stocks + mutual funds${hasLive && mfLive ? '' : ' · waiting on live data…'}`;
+  $('asof').textContent = 'as of ' + new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+
+  /* per-tab overview strips */
+  const ovc = (k, v, d, c) => `<div class="ovc"><div class="k">${k}</div><div class="v num ${c || ''}">${v}</div>${d ? `<div class="d num">${d}</div>` : ''}</div>`;
+  const stVal = hasLive ? invested + unreal : invested;
+  const unPct = invested ? unreal / invested * 100 : 0;
+  $('ov-stocks').innerHTML =
+    ovc('INVESTED', inr(invested, 0), (D.open || []).length + ' open positions') +
+    ovc('LIVE VALUE', hasLive ? inr(stVal, 0) : '—', 'at live quotes') +
+    ovc('UNREALISED', hasLive ? glyph(unreal) + ' ' + sgn(unreal) : '—', hasLive ? pct(unPct) : '', cls(unreal)) +
+    ovc('DAY MOVE', hasLive ? glyph(dayMove) + ' ' + sgn(dayMove) : '—', 'today', cls(dayMove));
+  const mfPct = mfInv ? mfPnl / mfInv * 100 : 0;
+  $('ov-funds').innerHTML =
+    ovc('INVESTED', inr(mfInv, 0), (D.mutual_funds || []).length + ' funds tracked') +
+    ovc('LIVE VALUE', mfLive ? inr(mfVal, 0) : '—', 'at latest NAV') +
+    ovc('OVERALL', mfLive ? glyph(mfPnl) + ' ' + sgn(mfPnl) : '—', mfLive ? pct(mfPct) : '', cls(mfPnl)) +
+    ovc('DAY MOVE', mfLive ? glyph(mfDay) + ' ' + sgn(mfDay) : '—', 'last NAV change', cls(mfDay));
+
+  $('summary').innerHTML = `
+    <div class="card"><div class="k">STOCKS · UNREALISED</div><div class="v num ${cls(unreal)}">${hasLive ? glyph(unreal) + ' ' + sgn(unreal) : '—'}</div><div class="d num">${inr(invested, 0)} riding · ${(D.open || []).length} open</div></div>
+    <div class="card"><div class="k">STOCKS · DAY MOVE</div><div class="v num ${cls(dayMove)}">${hasLive ? glyph(dayMove) + ' ' + sgn(dayMove) : '—'}</div><div class="d">today, open positions</div></div>
+    <div class="card"><div class="k">MF PORTFOLIO</div><div class="v num">${mfLive ? inr(mfVal, 0) : '—'}</div><div class="d num ${cls(mfPnl)}">${mfLive ? glyph(mfPnl) + ' ' + sgn(mfPnl) + ' overall' : '—'}</div></div>
+    <div class="card"><div class="k">MF · DAY MOVE</div><div class="v num ${cls(mfDay)}">${mfLive ? glyph(mfDay) + ' ' + sgn(mfDay) : '—'}</div><div class="d">last NAV change</div></div>`;
+
+  const totVal = (hasLive ? invested + unreal : invested) + (mfLive ? mfVal : 0);
+  const stPct = totVal > 0 ? (hasLive ? invested + unreal : invested) / totVal * 100 : 50;
+  $('alloc').hidden = false;
+  $('alloc-st').style.width = stPct + '%'; $('alloc-mf').style.width = (100 - stPct) + '%';
+  $('alloc-st-t').textContent = inr(hasLive ? invested + unreal : invested, 0) + ' (' + stPct.toFixed(0) + '%)';
+  $('alloc-mf-t').textContent = inr(mfLive ? mfVal : mfInv, 0) + ' (' + (100 - stPct).toFixed(0) + '%)';
+
+  $('mfs').innerHTML = (D.mutual_funds || []).map(mfCard).join('') || `<div class="empty">No funds tracked.</div>`;
+  const navDates = Object.values(NAVS).map(n => n.date).filter(Boolean);
+  $('nav-age').textContent = navDates.length ? 'NAV ' + navDates[0] : '';
+
+  $('open').innerHTML = (D.open || []).length ? D.open.map(openCard).join('') : `<div class="empty">No open positions.</div>`;
+  /* flash any live price that actually changed since the last render */
+  document.querySelectorAll('#open .trade').forEach(el => {
+    const s = el.getAttribute('data-sym'), lp = el.querySelector('[data-lp]');
+    if (!s || !lp) return;
+    const txt = lp.textContent;
+    if (prevPx[s] !== undefined && prevPx[s] !== txt) {
+      lp.classList.remove('px-flash'); void lp.offsetWidth; lp.classList.add('px-flash');
+    }
+    prevPx[s] = txt;
+  });
+
+  mfPerf.sort((a, b) => b.pct - a.pct);
+  const best = mfPerf[0], worst = mfPerf[mfPerf.length - 1];
+  const totInv = invested + mfInv;
+  $('stats').innerHTML = `
+    <div class="card"><div class="k">TOTAL INVESTED</div><div class="v num">${inr(totInv, 0)}</div><div class="d num">worth ${inr(totVal, 0)} now</div></div>
+    <div class="card"><div class="k">REALISED P&amp;L</div><div class="v num ${cls(realised)}">${glyph(realised)} ${sgn(realised)}</div><div class="d">${s.trades_closed || 0} closed · win ${(s.win_rate_pct || 0).toFixed(0)}%</div></div>
+    <div class="card"><div class="k">BEST FUND</div><div class="v num ${cls(best ? best.pct : 0)}" style="font-size:17px">${best ? esc(best.name) : '—'}</div><div class="d num">${best ? pct(best.pct) + ' · ' + sgn(best.pnl) : ''}</div></div>
+    <div class="card"><div class="k">WORST FUND</div><div class="v num ${cls(worst ? worst.pct : 0)}" style="font-size:17px">${worst ? esc(worst.name) : '—'}</div><div class="d num">${worst ? pct(worst.pct) + ' · ' + sgn(worst.pnl) : ''}</div></div>`;
+
+  $('closed').innerHTML = (D.closed || []).length ? D.closed.map(tradeCard).join('') : `<div class="empty">No closed trades yet.</div>`;
+  const idxBit = (q, l) => q && q.price != null
+    ? `${l} <b class="${cls(q.change_pct)} num">${Number(q.price).toLocaleString('en-IN', {maximumFractionDigits: 2})} ${glyph(q.change_pct)}${pct(q.change_pct)}</b><span class="sep">//</span>` : '';
+  const stBit = (D.open || []).map(t => {
+    const q = qmap(t);
+    return q && q.price != null ? `${esc(t.symbol)} <b class="num">₹${Number(q.price).toFixed(2)}</b> <b class="${cls(q.change_pct)} num">${glyph(q.change_pct)}${pct(q.change_pct)}</b><span class="sep">//</span>` : '';
+  }).join('');
+  const tape = idxBit(QUOTES['^NSEI'], 'NIFTY') + idxBit(QUOTES['^BSESN'], 'SENSEX') + stBit +
+    `MF <b class="num">${mfLive ? inr(mfVal, 0) : '–'}</b><span class="sep">//</span>DAY <b class="${cls(dayMove + mfDay)} num">${glyph(dayMove + mfDay)} ${sgn(dayMove + mfDay)}</b><span class="sep">//</span>REALISED <b class="${cls(realised)} num">${glyph(realised)} ${sgn(realised)}</b><span class="sep">//</span>`;
+  /* only touch the DOM when the tape actually changed — rewriting it every
+     3s shifts the -50% loop point and makes the scroll jump/stutter */
+  if (tape !== lastTape) { $('tapeA').innerHTML = tape; $('tapeB').innerHTML = tape; lastTape = tape; }
+  renderHoldings(); /* your-holdings strip on the markets tab stays live with quotes */
+}
+
+function renderNews(feeds){
+  if (!feeds || !feeds.length) { $('news').innerHTML = `<div class="empty">No news right now.</div>`; return; }
+  $('news').innerHTML = feeds.map(f => {
+    if (!f.items.length) return '';
+    return `<div style="font-size:11px;letter-spacing:2px;color:var(--dim);margin:14px 0 8px">${esc(f.topic.toUpperCase())}</div>` +
+      f.items.slice(0, 4).map(it =>
+        `<a class="news-item" href="${esc(it.link)}" target="_blank" rel="noopener"><div class="t">${esc(it.title)}</div><div class="m"><span class="news-src">${esc(it.source || 'News')}</span> · ${esc(it.pub ? new Date(it.pub).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : '')}</div></a>`
+      ).join('');
+  }).join('');
+}
+
+async function loadQuotes(){
+  try {
+    const syms = [...(D.open || []).map(t => t.yahoo).filter(Boolean), '^NSEI', '^BSESN'].join(',');
+    if (!syms) return;
+    const r = await fetch('/api/quotes?symbols=' + encodeURIComponent(syms), {cache: 'no-store'});
+    const j = await r.json();
+    (j.quotes || []).forEach(q => { if (!q.error) QUOTES[q.symbol] = q; });
+    lastQ = Date.now();
+  } catch(e) { /* keep last */ }
+  renderAll();
+}
+/* ---------- session chart: YOU (portfolio) vs NIFTY 50 ---------- */
+let CH = {}, PF = {}, curTF = '1D';
+const ST_COLORS = ['#4da3ff', '#3ddc84'];
+function holdingsQS(){
+  const st = (D.open || []).map(t => t.yahoo + ':' + t.qty).join(',');
+  const fu = (D.mutual_funds || []).map(f => f.code + ':' + f.units).join(',');
+  return 'stocks=' + encodeURIComponent(st) + '&funds=' + encodeURIComponent(fu);
+}
+async function loadSeries(tf, force) {
+  curTF = tf;
+  document.querySelectorAll('#tf-row .tf').forEach(b => b.classList.toggle('on', b.dataset.tf === tf));
+  if (force) { delete CH[tf]; delete PF[tf]; }
+  if (!CH[tf] || !PF[tf]) {
+    drawChart(true);
+    try {
+      const syms = [...(D.open || []).map(t => t.yahoo).filter(Boolean), '^NSEI'].join(',');
+      const [r1, r2] = await Promise.all([
+        fetch('/api/series?symbols=' + encodeURIComponent(syms) + '&tf=' + tf, {cache: 'no-store'}),
+        fetch('/api/pfseries?tf=' + tf + '&' + holdingsQS(), {cache: 'no-store'}),
+      ]);
+      const j1 = await r1.json(), j2 = await r2.json();
+      CH[tf] = (j1.series || []).filter(s => !s.error && s.points && s.points.length > 1);
+      PF[tf] = (j2.ok && j2.points && j2.points.length > 1) ? j2.points : null;
+    } catch(e) { CH[tf] = []; PF[tf] = null; }
+  }
+  drawChart();
+  renderVsn();
+}
+function xLabel(t){
+  const o = {timeZone: 'Asia/Kolkata'};
+  if (curTF === '1D') return new Date(t).toLocaleString('en-IN', Object.assign({hour:'2-digit', minute:'2-digit', hour12:false}, o));
+  if (curTF === '1Y' || curTF === '2Y' || curTF === '5Y') return new Date(t).toLocaleString('en-IN', Object.assign({month:'short', year:'2-digit'}, o));
+  return new Date(t).toLocaleString('en-IN', Object.assign({day:'numeric', month:'short'}, o));
+}
+let DRAW = null;
+function drawChart(loading) {
+  const svg = document.getElementById('chart'); if (!svg) return;
+  const W = 600, H = 200, PL = 46, PR = 10, PT = 12, PB = 24;
+  const data = (CH[curTF] || []).slice(0, 6);
+  const nifty = data.find(s => s.symbol === '^NSEI') || null;
+  const lines = [];
+  if (nifty) lines.push({nm: 'NIFTY 50', pts: nifty.points, c: '#8A877F', w: 1.6, dash: true});
+  data.filter(s => s.symbol !== '^NSEI').forEach((s, i) =>
+    lines.push({nm: (s.symbol || '').replace('.NS', ''), pts: s.points, c: ST_COLORS[i % ST_COLORS.length], w: 1.4}));
+  if (PF[curTF]) lines.push({nm: 'YOU', pts: PF[curTF], c: '#FFA028', w: 2.2, fill: true});
+  if (!lines.length) {
+    svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="#8A877F" font-size="12">${loading ? 'loading chart…' : 'no chart data'}</text>`;
+    const lg = document.getElementById('ch-legend'); if (lg) lg.innerHTML = '';
+    DRAW = null; renderVsn(); return;
+  }
+  let mn = Infinity, mx = -Infinity, t0 = Infinity, t1 = -Infinity;
+  lines.forEach(L => L.pts.forEach(p => {
+    mn = Math.min(mn, p[1]); mx = Math.max(mx, p[1]);
+    t0 = Math.min(t0, p[0]); t1 = Math.max(t1, p[0]);
+  }));
+  mn = Math.min(mn, 0); mx = Math.max(mx, 0);
+  const pad = Math.max((mx - mn) * 0.18, 0.25); mn -= pad; mx += pad;
+  const X = t => PL + (t1 > t0 ? (t - t0) / (t1 - t0) : 0.5) * (W - PL - PR);
+  const Y = v => PT + (mx - v) / (mx - mn) * (H - PT - PB);
+  let h = '<defs><linearGradient id="pfgrad" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0" stop-color="#FFA028" stop-opacity="0.20"/>' +
+    '<stop offset="1" stop-color="#FFA028" stop-opacity="0"/></linearGradient></defs>';
+  const steps = [0.25, 0.5, 1, 2, 5, 10, 20, 50];
+  const step = steps.find(s => (mx - mn) / s <= 5) || 100;
+  for (let g = Math.ceil(mn / step) * step; g <= mx + 1e-9; g += step) {
+    const y = Y(g), zero = Math.abs(g) < 1e-9;
+    h += `<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W - PR}" y2="${y.toFixed(1)}" stroke="${zero ? '#4a4a4e' : '#232326'}" stroke-width="1"${zero ? ' stroke-dasharray="4 3"' : ''}/>`;
+    h += `<text x="${PL - 6}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" fill="#8A877F" font-size="9.5">${(g > 0 ? '+' : '') + (+g.toFixed(2))}%</text>`;
+  }
+  for (let i = 0; i <= 4; i++) {
+    const t = t0 + (t1 - t0) * i / 4, x = X(t);
+    h += `<text x="${x.toFixed(1)}" y="${H - 7}" text-anchor="middle" fill="#8A877F" font-size="9.5">${esc(xLabel(t))}</text>`;
+  }
+  lines.forEach(L => {
+    const d = L.pts.map((p, k) => (k ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join('');
+    if (L.fill) {
+      const f = L.pts[0], l = L.pts[L.pts.length - 1];
+      h += `<path d="${d}L${X(l[0]).toFixed(1)} ${Y(mn).toFixed(1)}L${X(f[0]).toFixed(1)} ${Y(mn).toFixed(1)}Z" fill="url(#pfgrad)" stroke="none"/>`;
+    }
+    h += `<path d="${d}" fill="none" stroke="${L.c}" stroke-width="${L.w}"${L.dash ? ' stroke-dasharray="5 4"' : ''} vector-effect="non-scaling-stroke"/>`;
+    const last = L.pts[L.pts.length - 1];
+    h += `<circle cx="${X(last[0]).toFixed(1)}" cy="${Y(last[1]).toFixed(1)}" r="3" fill="${L.c}"/>`;
+  });
+  svg.innerHTML = h;
+  document.getElementById('ch-legend').innerHTML = lines.map(L => {
+    const chg = L.pts[L.pts.length - 1][1];
+    const sw = L.dash
+      ? `<span class="sw" style="background:transparent;border:1px dashed ${L.c};width:7px;height:7px"></span>`
+      : `<span class="sw" style="background:${L.c}"></span>`;
+    return `<span>${sw}${esc(L.nm)} <b class="num ${cls(chg)}">${(chg >= 0 ? '+' : '') + chg.toFixed(2)}%</b></span>`;
+  }).join('');
+  document.getElementById('ch-tag').textContent = curTF === '1D' ? 'today' : curTF;
+  DRAW = {lines, X, t0, t1, PT, PB, H, W};
+  renderVsn();
+}
+/* YOU vs NIFTY 50 stat — follows the selected timeframe */
+function renderVsn(){
+  const pf = PF[curTF], n = (CH[curTF] || []).find(s => s.symbol === '^NSEI');
+  const pv = pf && pf.length ? pf[pf.length - 1][1] : null;
+  const nv = n && n.points && n.points.length ? n.points[n.points.length - 1][1] : null;
+  const setP = (id, v) => {
+    const el = document.getElementById(id);
+    if (v == null || isNaN(v)) { el.textContent = '—'; el.className = 'v num'; }
+    else { el.textContent = (v < 0 ? '−' : '+') + Math.abs(v).toFixed(2) + '%'; el.className = 'v num ' + cls(v); }
+  };
+  setP('vsn-you', pv); setP('vsn-nifty', nv);
+  const d = document.getElementById('vsn-diff');
+  if (pv == null || nv == null || isNaN(pv) || isNaN(nv)) { d.textContent = '—'; d.className = 'v num'; }
+  else {
+    const df = pv - nv;
+    d.textContent = (df < 0 ? '▼ −' : '▲ +') + Math.abs(df).toFixed(2) + 'pp';
+    d.className = 'v num ' + cls(df);
+  }
+  const t = document.getElementById('vsn-tf'); if (t) t.textContent = curTF;
+}
+/* hover crosshair: vertical line + tooltip with every line's value at that point */
+(function(){
+  const svg = document.getElementById('chart');
+  const tip = document.createElement('div'); tip.id = 'chart-tip';
+  svg.parentElement.appendChild(tip);
+  const hide = () => { tip.style.display = 'none'; const g = document.getElementById('xh-line'); if (g) g.remove(); };
+  svg.addEventListener('mouseleave', hide);
+  svg.addEventListener('mousemove', e => {
+    if (!DRAW || !DRAW.lines.length) return hide();
+    const r = svg.getBoundingClientRect();
+    const sx = (e.clientX - r.left) * (DRAW.W / r.width);
+    const t = DRAW.t0 + (sx - 46) / (DRAW.W - 46 - 10) * (DRAW.t1 - DRAW.t0);
+    if (t < DRAW.t0 || t > DRAW.t1) return hide();
+    let html = `<div class="tt">${esc(xLabel(Math.round(t)))}</div>`;
+    DRAW.lines.forEach(L => {
+      let bi = 0, bd = Infinity;
+      for (let i = 0; i < L.pts.length; i++) { const dd = Math.abs(L.pts[i][0] - t); if (dd < bd) { bd = dd; bi = i; } }
+      const v = L.pts[bi][1];
+      html += `<div><span style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;background:${L.c}"></span>${esc(L.nm)} <b class="num ${cls(v)}">${(v >= 0 ? '+' : '') + v.toFixed(2)}%</b></div>`;
+    });
+    tip.innerHTML = html; tip.style.display = 'block';
+    const wr = svg.parentElement.getBoundingClientRect();
+    let lx = e.clientX - wr.left + 16, ly = e.clientY - wr.top - 12;
+    if (lx + 170 > wr.width) lx = e.clientX - wr.left - 180;
+    tip.style.left = Math.max(4, lx) + 'px'; tip.style.top = Math.max(4, ly) + 'px';
+    let g = document.getElementById('xh-line');
+    if (!g) { g = document.createElementNS('http://www.w3.org/2000/svg', 'line'); g.id = 'xh-line'; svg.appendChild(g); }
+    const x = DRAW.X(Math.max(DRAW.t0, Math.min(DRAW.t1, t))).toFixed(1);
+    g.setAttribute('x1', x); g.setAttribute('x2', x);
+    g.setAttribute('y1', DRAW.PT); g.setAttribute('y2', DRAW.H - DRAW.PB);
+    g.setAttribute('stroke', '#FFA028'); g.setAttribute('stroke-opacity', '0.45'); g.setAttribute('stroke-width', '1');
+  });
+})();
+/* ---------- markets tab: India indices, VIX & IT, gold & silver ---------- */
+const MKTS = [
+  {s:'^NSEI', n:'NIFTY 50', c:'₹', sec:'in', grp:'idx', held:'HDFC Nifty 50'},
+  {s:'^BSESN', n:'SENSEX', c:'₹', sec:'in', grp:'idx'},
+  {s:'^NSEBANK', n:'NIFTY BANK', c:'₹', sec:'in', grp:'idx'},
+  {s:'^NSMIDCP', n:'NIFTY NEXT 50', c:'₹', sec:'in', grp:'idx'},
+  {s:'NIFTY_MIDCAP_100.NS', n:'MIDCAP 100', c:'₹', sec:'in', grp:'idx', held:'HDFC Mid Cap'},
+  {s:'MOSMALL250.NS', n:'SMALLCAP 250', c:'₹', sec:'in', grp:'idx', sub:'ETF proxy', held:'Nippon Small Cap'},
+  {s:'^INDIAVIX', n:'INDIA VIX', c:'', sec:'in', grp:'vol'},
+  {s:'^CNXIT', n:'NIFTY IT', c:'₹', sec:'in', grp:'vol'},
+  {s:'GOLDBEES.NS', n:'GOLD ₹', c:'₹', sec:'in', grp:'pm', sub:'Gold BeES ETF', held:'Axis Gold/Silver'},
+  {s:'SILVERBEES.NS', n:'SILVER ₹', c:'₹', sec:'in', grp:'pm', sub:'Silver BeES ETF', held:'Axis Gold/Silver'},
+];
+let MKTQ = {};
+function mktCard(m){
+  const q = MKTQ[m.s];
+  const p = q && q.price != null ? q.price : null;
+  const ch = q && q.change != null ? q.change : null;
+  const chp = q && q.change_pct != null ? q.change_pct : null;
+  const loc = m.c === '$' ? 'en-US' : 'en-IN';
+  const fmt = v => (m.c || '') + Number(v).toLocaleString(loc, {minimumFractionDigits:2, maximumFractionDigits:2});
+  const pv = p == null ? '—' : fmt(p);
+  const chv = ch == null ? '' : glyph(ch) + ' ' + fmt(Math.abs(ch)) + ' (' + pct(chp) + ')';
+  const badge = m.held ? `<span class="held-tag" title="${esc(m.held)}">HELD</span>` : '';
+  return `<div class="mkt${m.held ? ' held' : ''}"><div class="k">${esc(m.n)}${m.sub ? ' · ' + esc(m.sub) : ''}${badge}</div>` +
+    `<div class="v num">${pv}</div><div class="d num ${cls(ch)}">${chv || '—'}</div>` +
+    `<svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" data-spark="${esc(m.s)}" aria-hidden="true"></svg></div>`;
+}
+function renderMarkets(){
+  const g = x => MKTS.filter(m => m.grp === x).map(mktCard).join('');
+  $('mkt-idx').innerHTML = g('idx');
+  $('mkt-vol').innerHTML = g('vol');
+  $('mkt-pm').innerHTML = g('pm');
+  renderHoldings();
+}
+/* featured strip: his own open stock positions, live */
+function renderHoldings(){
+  const el = $('mkt-hold'); if (!el || !D) return;
+  el.innerHTML = (D.open || []).map(t => {
+    const q = QUOTES[t.yahoo];
+    const p = q && q.price != null ? q.price : null;
+    const chp = q && q.change_pct != null ? q.change_pct : null;
+    const val = p != null ? p * t.qty : null;
+    const dpnl = q && q.change != null ? q.change * t.qty : null;
+    return `<div class="mkt held"><div class="k">${esc(t.symbol)}</div>` +
+      `<div class="v num">${p != null ? px(p) : '—'}</div>` +
+      `<div class="d num ${cls(chp)}">${chp != null ? glyph(chp) + ' ' + pct(chp) : '—'}</div>` +
+      `<div class="d num" style="color:var(--dim)">${t.qty} sh · ${val != null ? inr(val, 0) : '—'} · day ${dpnl != null ? sgn(dpnl) : '—'}</div></div>`;
+  }).join('') || `<div class="empty">No open positions.</div>`;
+}
+async function drawSparks(){
+  const syms = MKTS.map(m => m.s), series = {};
+  for (let i = 0; i < syms.length; i += 6) {
+    try {
+      const r = await fetch('/api/series?symbols=' + encodeURIComponent(syms.slice(i, i + 6).join(',')) + '&tf=1D', {cache: 'no-store'});
+      const j = await r.json();
+      (j.series || []).forEach(s => { if (!s.error && s.points && s.points.length > 1) series[s.symbol] = s.points; });
+    } catch(e) { /* spark optional */ }
+  }
+  document.querySelectorAll('[data-spark]').forEach(el => {
+    const pts = series[el.getAttribute('data-spark')];
+    if (!pts) { el.innerHTML = ''; return; }
+    const W = 120, H = 30, vs = pts.map(p => p[1]);
+    const mn = Math.min.apply(null, vs), mx = Math.max.apply(null, vs), rg = (mx - mn) || 1;
+    const d = pts.map((p, k) => (k ? 'L' : 'M') + (k / (pts.length - 1) * W).toFixed(1) + ' ' +
+      (H - 3 - ((p[1] - mn) / rg) * (H - 6)).toFixed(1)).join('');
+    const up = vs[vs.length - 1] >= 0;
+    el.innerHTML = `<path d="${d}" fill="none" stroke="${up ? '#3ddc84' : '#ff5f56'}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
+  });
+}
+async function loadMarkets(){
+  try {
+    const syms = MKTS.map(m => m.s).join(',');
+    const r = await fetch('/api/quotes?symbols=' + encodeURIComponent(syms), {cache: 'no-store'});
+    const j = await r.json();
+    (j.quotes || []).forEach(q => { if (!q.error) MKTQ[q.symbol] = q; });
+  } catch(e) { /* keep last */ }
+  renderMarkets();
+  drawSparks();
+}
+async function boot(){
+  try {
+    const r = await fetch('trades.json', {cache: 'no-store'});
+    D = await r.json();
+    /* seed NAVs from the background snapshot so funds render instantly;
+       the live /api/mfnav fetch below then refreshes them if newer */
+    (D.mutual_funds || []).forEach(f => {
+      if (f.nav != null && !NAVS[f.code]) NAVS[f.code] = {nav: f.nav, date: f.nav_date, prev_nav: f.prev_nav};
+    });
+    /* seed stock quotes from the background snapshot too — instant prices
+       on open, then the 3s live refresh takes over */
+    (D.open || []).forEach(t => { if (t.live && t.yahoo && !QUOTES[t.yahoo]) QUOTES[t.yahoo] = t.live; });
+    renderAll();
+    $('snap').textContent = 'snapshot ' + new Date(D.generated).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
+  } catch(e) {
+    $('open').innerHTML = `<div class="err"><strong>Couldn't load the data.</strong> ${esc(e.message)}</div>`;
+    return;
+  }
+  try {
+    const codes = (D.mutual_funds || []).map(f => f.code).join(',');
+    const [nr, qr] = await Promise.all([
+      fetch('/api/mfnav?codes=' + encodeURIComponent(codes), {cache: 'no-store'}),
+      fetch('/api/news?topics=' + encodeURIComponent((D.news_topics || []).join('|')), {cache: 'no-store'}),
+    ]);
+    const nj = await nr.json(); (nj.navs || []).forEach(n => { if (!n.error) NAVS[n.code] = n; });
+    const qj = await qr.json(); renderNews(qj.feeds || []);
+  } catch(e) { /* degrade gracefully */ }
+  await loadQuotes();
+  renderAll();
+  setInterval(loadQuotes, 3000);
+  /* session chart: load 1D, wire timeframe pills, refresh every 5 min */
+  loadSeries('1D');
+  document.getElementById('tf-row').addEventListener('click', e => {
+    const b = e.target.closest('.tf'); if (b && b.dataset.tf !== curTF) loadSeries(b.dataset.tf);
+  });
+  setInterval(() => loadSeries(curTF, true), 300000);
+  /* markets tab: live indices/commodities/FX, refresh every minute */
+  loadMarkets();
+  setInterval(loadMarkets, 60000);
+  /* half-second UI heartbeat: ticking clock + live age counter, so the page
+     always feels in motion between real quote arrivals */
+  const uiTick = () => {
+    const qAge = $('q-age');
+    if (qAge) qAge.innerHTML = '<span class="livedot"></span>LIVE';
+  };
+  setInterval(uiTick, 500); uiTick();
+}
+/* ---------- swipeable tabs: overview / stocks / mutual funds ---------- */
+var tabIdx = 0, track = $('track');
+function goTab(i){
+  tabIdx = Math.max(0, Math.min(3, i));
+  track.style.transform = 'translateX(-' + (tabIdx * 100) + '%)';
+  var bs = document.querySelectorAll('.tab');
+  for (var j = 0; j < bs.length; j++) bs[j].classList.toggle('on', j === tabIdx);
+}
+document.querySelectorAll('.tab').forEach(function(b){
+  b.addEventListener('click', function(){ goTab(parseInt(b.getAttribute('data-i'), 10)); });
+});
+(function(){
+  var sx = 0, sy = 0, t0 = 0;
+  var vp = document.querySelector('main.viewport');
+  vp.addEventListener('touchstart', function(e){
+    var t = e.changedTouches[0]; sx = t.clientX; sy = t.clientY; t0 = Date.now();
+  }, {passive: true});
+  vp.addEventListener('touchend', function(e){
+    var t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Date.now() - t0 > 600) return;
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.4) goTab(tabIdx + (dx < 0 ? 1 : -1));
+  }, {passive: true});
+})();
+
+boot();
+</script>
+</body>
+</html>

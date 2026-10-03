@@ -121,31 +121,31 @@ export function initCalendar(ctx) {
     const d = new Date(dayKey + 'T00:00:00'), past = d.getTime() < startOfDay(Date.now());
     E.pop.innerHTML = `<div class="cv-pop-h"><span class="lab">SCHEDULE FOR</span><b>${DOW[(d.getDay() + 6) % 7]} ${d.getDate()} ${MONTHS[d.getMonth()]}</b><span class="sp"></span><button class="cv-x" data-act="close">✕</button></div>
       ${past ? '<div class="cv-note">That day has passed — pick today or a day after it.</div>' : ''}
-      <div class="cv-row"><select class="cv-dept">${DEPT_KEYS.map(k => `<option value="${k}"${k === lastDept ? ' selected' : ''}>${DEPTS[k].name}</option>`).join('')}</select><input type="time" class="cv-time" value="09:00"><select class="cv-model" title="which model runs it"><option value="">${esc(modelName(officeModel()).toUpperCase())}</option>${MODEL_KEYS.filter(k => k !== officeModel()).map(k => `<option value="${k}">${esc(modelName(k).toUpperCase())}</option>`).join('')}</select></div>
+      <div class="cv-row"><select class="cv-dept">${DEPT_KEYS.map(k => `<option value="${k}"${k === lastDept ? ' selected' : ''}>${DEPTS[k].name}</option>`).join('')}</select><input type="time" class="cv-time" value="09:00"></div>
       <textarea class="cv-text" rows="3" placeholder="What should happen that day?"></textarea>
       <div class="cv-row"><button class="cv-rep" data-act="rep">REPEAT</button><select class="cv-cad" hidden>${CADENCES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><label class="cv-ok" hidden><input type="checkbox" class="cv-okc" checked> needs my OK</label><span class="sp"></span><button class="cv-go" data-act="go"${past ? ' disabled' : ''}>ADD</button></div>
       <div class="cv-hint">${past ? '' : 'A task for this day — it runs at that time and lands in the panel. REPEAT makes it a routine from this date.'}</div>`;
     E.pop.hidden = false; place(E.pop, cell);
-    const P = { dept: E.pop.querySelector('.cv-dept'), time: E.pop.querySelector('.cv-time'), model: E.pop.querySelector('.cv-model'), text: E.pop.querySelector('.cv-text'), rep: E.pop.querySelector('.cv-rep'), cad: E.pop.querySelector('.cv-cad'), ok: E.pop.querySelector('.cv-ok'), okc: E.pop.querySelector('.cv-okc'), go: E.pop.querySelector('.cv-go'), hint: E.pop.querySelector('.cv-hint') };
+    const P = { dept: E.pop.querySelector('.cv-dept'), time: E.pop.querySelector('.cv-time'), text: E.pop.querySelector('.cv-text'), rep: E.pop.querySelector('.cv-rep'), cad: E.pop.querySelector('.cv-cad'), ok: E.pop.querySelector('.cv-ok'), okc: E.pop.querySelector('.cv-okc'), go: E.pop.querySelector('.cv-go'), hint: E.pop.querySelector('.cv-hint') };
     let repeat = false;
     const hint = () => {
       if (past) return;
       const k = P.dept.value; lastDept = k;
-      if (repeat) { const w = fromPicker(P.cad.value, P.time.value, dayKey); const first = occurrences(w, Date.now(), Date.now() + 400 * DAY, 1)[0]; P.hint.innerHTML = RT_DEPTS.includes(k) ? `Routine · <b>${esc(describe(w))}</b> · first run ${esc(first ? new Date(first).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + hm(first) : '—')}${isLive() ? ' · Claude names the agent' : ''}` : `<span class="amber">${esc(rtRefuse(k))}</span>`; P.go.disabled = !RT_DEPTS.includes(k); }
-      else { P.hint.innerHTML = `Task for <b>${DOW[(d.getDay() + 6) % 7]} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} · ${esc(P.time.value)}</b>${isLive() ? ' · Claude names the agent now, runs it then' : ''}`; P.go.disabled = false; }
+      if (repeat) { const w = fromPicker(P.cad.value, P.time.value, dayKey); const first = occurrences(w, Date.now(), Date.now() + 400 * DAY, 1)[0]; P.hint.innerHTML = RT_DEPTS.includes(k) ? `Routine · <b>${esc(describe(w))}</b> · first run ${esc(first ? new Date(first).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + hm(first) : '—')}${isLive() ? ' · Ray picks it up from the inbox' : ''}` : `<span class="amber">${esc(rtRefuse(k))}</span>`; P.go.disabled = !RT_DEPTS.includes(k); }
+      else { P.hint.innerHTML = `Task for <b>${DOW[(d.getDay() + 6) % 7]} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} · ${esc(P.time.value)}</b>${isLive() ? ' · Ray picks it up from the inbox' : ''}`; P.go.disabled = false; }
     };
     P.rep.addEventListener('click', () => { repeat = !repeat; P.rep.classList.toggle('on', repeat); P.cad.hidden = !repeat; P.ok.hidden = !repeat; if (repeat) { const dow = (d.getDay() + 6) % 7; P.cad.value = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'][dow]; } hint(); });
-    [P.dept, P.time, P.cad, P.model].forEach(el => { el.addEventListener('change', hint); el.addEventListener('keydown', e => e.stopPropagation()); });
+    [P.dept, P.time, P.cad].forEach(el => { el.addEventListener('change', hint); el.addEventListener('keydown', e => e.stopPropagation()); });
     P.text.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); } else if (e.key === 'Escape') closePop(); });
     P.go.addEventListener('click', go);
     hint(); P.text.focus();
     async function go() {
       const text = P.text.value.trim().replace(/[.!]+$/, ''); if (!text) { P.text.focus(); return; }
-      const k = P.dept.value, model = P.model.value || undefined;
-      P.go.disabled = true; P.hint.innerHTML = isLive() ? 'Claude is naming the agent…' : 'Adding…';
+      const k = P.dept.value;
+      P.go.disabled = true; P.hint.innerHTML = isLive() ? 'Sending to Ray…' : 'Adding…';
       let r;
-      if (repeat) r = await createRoutine({ dept: k, text, when: fromPicker(P.cad.value, P.time.value, dayKey), needsOk: P.okc.checked, model });
-      else r = await create({ dept: k, text, at: new Date(`${dayKey}T${P.time.value || '09:00'}:00`).getTime(), model });
+      if (repeat) r = await createRoutine({ dept: k, text, when: fromPicker(P.cad.value, P.time.value, dayKey), needsOk: P.okc.checked });
+      else r = await create({ dept: k, text, at: new Date(`${dayKey}T${P.time.value || '09:00'}:00`).getTime() });
       if (!r || !r.ok) { P.hint.innerHTML = `<span class="amber">${esc((r && r.error) || 'Could not add it.')}</span>`; P.go.disabled = false; return; }
       closePop(); render();
       const el = E.grid.querySelector(`.cv-ev[data-ev="${repeat ? 'r:' + r.routine.id + ':' : 't:' + r.task.id}"], .cv-ev[data-ev^="${repeat ? 'r:' + r.routine.id + ':' : 't:' + r.task.id}"]`);
@@ -162,7 +162,7 @@ export function initCalendar(ctx) {
       popKind = 'event';
       E.pop.innerHTML = `<div class="cv-pop-h"><span class="lab">${t.state === 'scheduled' ? 'SCHEDULED TASK' : t.state.toUpperCase()}</span><span class="sp"></span><button class="cv-x" data-act="close">✕</button></div>
         <div class="cv-pop-t">${esc(t.title)}</div>
-        <div class="cv-pop-m">${av(t.agent)} ${esc(a ? a.name : '')} · ${esc(DEPTS[t.dept].name)}${t.state === 'scheduled' ? ` · runs ${esc(untilText(t.dueAt))} (${hm(t.dueAt)})` : ''}${t.modelUsed ? ' · ' + esc(modelName(t.modelUsed)) : ''}</div>
+        <div class="cv-pop-m">${av(t.agent)} ${esc(a ? a.name : '')} · ${esc(DEPTS[t.dept].name)}${t.state === 'scheduled' ? ` · runs ${esc(untilText(t.dueAt))} (${hm(t.dueAt)})` : ''}</div>
         ${t.text && t.text !== t.title ? `<div class="cv-pop-p">${esc(t.text)}</div>` : ''}
         <div class="cv-row"><button class="cv-btn" data-act="open">OPEN THE AGENT</button>${t.state === 'scheduled' ? '<button class="cv-btn warn" data-act="cancel">CANCEL IT</button>' : ''}</div>`;
       E.pop.hidden = false; place(E.pop, el);

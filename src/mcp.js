@@ -1,36 +1,37 @@
-// CONNECTORS — per-department dock of MCP brand-logo tiles (AJ's spec, 2 Aug 2026, rev 2).
-// v1 was an orbit ring; AJ: "uncoordinated and hard to notice". Now each dept has ONE fixed
-// "CONNECTORS" group — a tidy camera-facing row of tiles — with constant back-and-forth
-// packet traffic between tiles and desks so the connectors visibly help the agents work.
-// Real sim events fire a strong pulse + tile→desk beam + return ack; ambient exchanges keep
-// steady energy between events. Full brand colour · LOD small-out/full-in · click = tooltip.
-//
-// V3.1 (7 Sep 2026): the list is REAL when served — `connectors` (src/connectors.js) carries the
-// MCP servers the user's Claude Code is connected to, their status, which pods they feed, and
-// the roster's tool preferences; onToolsUsed() lights the wire an agent actually pulled on.
-// Opened as a file (no server) the demo list below still plays.
+// CONNECTORS — per-department dock of crew tiles (Ray edition: the old MCP brand-logo
+// strip was replaced by 6 crew tiles — research, build, docs, comms, money, plan — because
+// the phone build has no MCP servers to show). Tiles pulse and beam when agents do real
+// work (onAgentEvent / onToolsUsed); click = tooltip. Nothing here pretends to be an
+// integration that isn't wired.
 import * as THREE from 'three';
-import { MCP_LOGOS, MCP_BY_DEPT } from './mcplogos.js';
+// RAY EDITION: brand-logo bundle replaced by 6 crew tiles (phone build size).
+const _LOGO_TILES = [
+  { id:'research', dept:'emails',    label:'Research', title:'research · bhavishya' },
+  { id:'build',    dept:'delivery',  label:'Build',    title:'build · bhavishya' },
+  { id:'docs',     dept:'sales',     label:'Docs',     title:'docs · bhavishya' },
+  { id:'comms',    dept:'marketing', label:'Comms',    title:'comms · bhavishya' },
+  { id:'money',    dept:'fin',       label:'Money',    title:'money · bhavishya' },
+  { id:'plan',     dept:'ops',       label:'Plan',     title:'plan · bhavishya' },
+];
+const MCP_BY_DEPT = {}; for (const t of _LOGO_TILES) (MCP_BY_DEPT[t.dept] = MCP_BY_DEPT[t.dept] || []).push(t.id);
+// Dict keyed by tile id — initMcp indexes LOGOS[key].img — plus the headless-model entries
+// the top bar expects. Images are generated lazily (needs document) inside initMcp.
+function rayLogos() {
+  const d = {};
+  for (const t of _LOGO_TILES) d[t.id] = { name: t.label, img: tile(t.label) };
+  return d;
+}
 import { applyAgentTools, profileShared } from './profile.js';
+import { tile } from './connectors.js'; // canvas tile painter (initials on brand ink) for our crew tiles
 
 // agent → tools they'd plausibly be driving (falls back to any connector in the dept's dock)
 export const AGENT_MCP = {
-  // marketing
-  mlead: ['meta', 'clarity', 'notion'], ada: ['meta', 'clarity'], newt: ['beehiiv', 'loops'], gfx: ['canva'], iggy: ['canva', 'clarity'], riley: ['meta', 'beehiiv', 'clarity', 'notion'],
-  vid: ['hyperframes', 'canva'],
-  // emails
-  elead: ['gmail', 'notion'], cmail: ['gmail'], imail: ['gmail', 'notion'], vmail: ['gmail'], kmail: ['gmail'],
-  // sales
-  enzo: ['fullenrich'], lexi: ['notion', 'gmail'], ilm: ['gmail', 'imessage', 'fullenrich'], pros: ['apollo', 'gmail'],
-  piper: ['notion', 'gmail'], folo: ['gmail', 'imessage'],
-  // operations
-  olead: ['notion', 'gmail', 'pandadoc'], scout: ['notion'], legal: ['pandadoc', 'gmail'], comply: ['notion', 'gmail'], report: ['gmail', 'notion'], dash: ['notion'],
-  // finance
-  alead: ['xero', 'gmail'],
-  invo: ['xero', 'stripe'], apay: ['xero'], recon: ['stripe', 'xero'],
-  // delivery
-  dlead: ['notion', 'gmail'], pco: ['notion'], qa: ['notion'], crep: ['pandadoc', 'notion'], cass: ['canva', 'notion'],
-  dasst: ['canva'], ona: ['gmail', 'notion'],
+  radar: ['research'], deepscan: ['research'],
+  forge: ['build'], firmware: ['build'], apps: ['build'],
+  scribe: ['docs'], archive: ['docs'],
+  relay: ['comms'], pager: ['comms'],
+  bhavishya: ['money'], sentinel: ['money'],
+  captain: ['plan'],
 };
 applyAgentTools(AGENT_MCP); // INDUSTRY PROFILE (12 Sep 2026): per-industry demo file; no-op otherwise
 
@@ -61,7 +62,8 @@ function smooth(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a)))
 export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null }) {
   const LIVE = !!(connectors && connectors.live);
   const BY_DEPT = LIVE ? connectors.byDept : MCP_BY_DEPT;
-  const LOGOS = LIVE ? { ...MCP_LOGOS, ...connectors.logos } : MCP_LOGOS;
+  const LOGOS = rayLogos();
+  if (LIVE && connectors.logos) Object.assign(LOGOS, connectors.logos);
   const AGENT_TOOLS = (LIVE && connectors.agentTools) || AGENT_MCP;
   const STATUS = (LIVE && connectors.status) || {};
   const NAMES = (LIVE && connectors.names) || {};
@@ -162,15 +164,15 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
   const topconn = document.getElementById('topconn');
   const topImgs = {};
   if (topconn) {
-    topconn.innerHTML = `<span class="tc-lab"><span class="dot"></span>CONNECTED TO</span>`;
+    topconn.innerHTML = `<span class="tc-lab"><span class="dot"></span>CREW</span>`;
     uniqKeys.forEach((k, i) => {
       const img = document.createElement('img');
       img.src = LOGOS[k].img;
       img.alt = img.title = LOGOS[k].name;
       if (STATUS[k] && STATUS[k] !== 'connected') { // real list: a server that is there but not usable
         img.classList.add('off', 'st-' + STATUS[k]);
-        img.title = LOGOS[k].name + ' — ' + (k === 'chrome' && STATUS[k] === 'pending' ? 'Claude in Chrome extension not paired on this machine — run `claude --chrome` once, then restart the office' // V3.2 (16 Sep)
-          : ({ 'needs-auth': 'needs authentication (run claude, then /mcp)', failed: 'failed to connect', pending: 'connecting…', denied: 'connected · blocked for agents in office.config.json' }[STATUS[k]] || STATUS[k]));
+        img.title = LOGOS[k].name + ' — ' + (STATUS[k] === 'pending' ? 'not paired on this machine'
+          : ({ 'needs-auth': 'needs authentication', failed: 'failed to connect', pending: 'connecting…', denied: 'connected · blocked for agents in office.config.json' }[STATUS[k]] || STATUS[k]));
       }
       img.style.setProperty('--d', (0.15 + i * 0.09) + 's'); // staggered pop-in on load
       img.addEventListener('animationend', (e) => { if (e.animationName === 'tcin') img.classList.add('in'); });
@@ -178,10 +180,10 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
       topconn.appendChild(img);
       topImgs[k] = img;
     });
-    if (LIVE && !uniqKeys.length) { // honest empty state — nothing is wired until the user connects something
+    if (LIVE && !uniqKeys.length) { // honest empty state — nothing is wired up
       const none = document.createElement('span');
       none.className = 'tc-none';
-      none.textContent = 'nothing yet — connect in claude.ai or run: claude mcp add';
+      none.textContent = 'nothing connected';
       topconn.appendChild(none);
     }
   }
@@ -276,77 +278,16 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     shared[key] = { ink, drop, jdot, wires: wiresOf, offset: 0, jy: 92 + si * 10 };
   });
 
-  // ── the MODEL layer (AJ, 5 Sep 2026): Claude + ChatGPT run the office headless ──
-  // Two logos on the right of the top bar, each wired straight into the Brain pod — the
-  // conduits pulse on their own so the thinking is visible even when nothing else fires.
-  const MODELS = { claude: '#D97757', chatgpt: '#151414' };
-  const topmodels = document.getElementById('topmodels');
-  const modelImgs = {};
-  if (topmodels) {
-    topmodels.innerHTML = `<span class="tc-lab"><span class="dot"></span>RUNS HEADLESS ON</span>`;
-    Object.keys(MODELS).forEach((k, i) => {
-      const img = document.createElement('img');
-      img.src = LOGOS[k].img;
-      img.alt = img.title = LOGOS[k].name + ' — headless';
-      img.style.setProperty('--d', (0.9 + i * 0.12) + 's');
-      img.addEventListener('animationend', (e) => { if (e.animationName === 'tcin') img.classList.add('in'); });
-      img.addEventListener('click', () => modelPulse(k, true));
-      topmodels.appendChild(img);
-      modelImgs[k] = img;
-    });
-  }
-  const mwires = {};
-  Object.keys(MODELS).forEach((k, i) => {
-    const path = document.createElementNS(svgNS, 'path');
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', MODELS[k]);
-    path.setAttribute('stroke-width', '1.5');
-    path.setAttribute('stroke-linecap', 'round');
-    path.setAttribute('stroke-dasharray', '3 8');
-    svg.appendChild(path);
-    const dot = document.createElementNS(svgNS, 'circle');
-    dot.setAttribute('r', '2.6');
-    dot.setAttribute('fill', MODELS[k]);
-    svg.appendChild(dot);
-    // sockets on the Brain pod's back edge, side by side
-    mwires[k] = { path, dot, port: [LAYOUT.brain.w / 2 - 2 - i * 4, 1.3, -LAYOUT.brain.d / 2] };
-  });
-  let nextModelPulse = performance.now() + 2600;
-  // V3.6 (A3 · B1 · C1): the plan's own gauge beside the Claude logo — session and week, as Claude Code shows them.
-  // Live means Claude only: the ChatGPT tile and its wire are demo theatre and go the first time usage arrives.
-  let usageEl = null;
-  function setUsage(u) {
-    if (!topmodels) return;
-    if (modelImgs.chatgpt) { modelImgs.chatgpt.remove(); delete modelImgs.chatgpt; const w = mwires.chatgpt; if (w) { w.path.setAttribute('d', ''); w.dot.setAttribute('opacity', 0); delete mwires.chatgpt; } }
-    if (!usageEl) { usageEl = document.createElement('span'); usageEl.className = 'tm-usage'; topmodels.appendChild(usageEl); }
-    const when = ts => ts ? new Date(ts).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '—';
-    const bar = (lab, x) => { if (!x) return ''; const cls = x.percent >= 90 ? 'c' : x.percent >= 75 ? 'w' : ''; return `<span>${lab}</span><span class="ub"><i class="${cls}" style="width:${x.percent}%"></i></span><b>${x.percent >= 100 ? 'LIMIT' : x.percent + '%'}</b>`; };
-    if (u && u.ok && u.source === 'claude') {
-      usageEl.className = 'tm-usage';
-      usageEl.innerHTML = bar('SESSION', u.session) + (u.session && u.week ? '<span class="sep">·</span>' : '') + bar('WEEK', u.week);
-      usageEl.title = `Your Claude plan, as Claude Code shows it. Session resets ${when(u.session && u.session.resetsAt)} · week resets ${when(u.week && u.week.resetsAt)}.`;
-    } else if (u && u.ok && u.source === 'office') {
-      const w = u.window || {}; const n = w.tokens || 0; const tok = n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n);
-      usageEl.className = 'tm-usage off';
-      usageEl.innerHTML = `<span>THIS WINDOW</span><b>${tok}</b><span>TOKENS</span><span class="sep">·</span><b>${w.runs || 0}</b><span>RUNS</span>` + (w.resetsAt ? `<span class="sep">·</span><span>RESETS</span><b>${new Date(w.resetsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</b>` : '');
-      usageEl.title = `Claude's usage gauge is unavailable (${u.reason || 'no answer'}). This is the office's own count for the current five-hour window.`;
-    } else { usageEl.className = 'tm-usage off'; usageEl.innerHTML = '<span>USAGE UNAVAILABLE</span>'; usageEl.title = (u && u.reason) || ''; }
-  }
-  function modelPulse(k, strong = false) {
-    if (!modelImgs[k]) return; // a tile that has gone (ChatGPT in a live office) has no wire to pulse
-    wirePulse('brain', { model: k, scale: strong ? 1.2 : 0.9 });
-    wirePulse('brain', { model: k, reverse: true, delay: 900, scale: strong ? 1 : 0.75 });
-    if (modelImgs[k] && strong) { modelImgs[k].classList.remove('tpulse'); void modelImgs[k].offsetWidth; modelImgs[k].classList.add('tpulse'); }
-  }
-
-  // subtle by design (rev 2, AJ: pulses still read as attacks): small, dim, slow glides
-  function wirePulse(dept, { reverse = false, delay = 0, scale = 1, shared: sk = null, model = null } = {}) {
+  // ── RAY EDITION (29 Sep 2026): the headless-model layer is gone — there is no
+  // model integration on the phone build, so the tiles, wires and the
+  // usage gauge were deleted. The wirePulse helper below serves the crew tiles.
+  function wirePulse(dept, { reverse = false, delay = 0, scale = 1, shared: sk = null } = {}) {
     const el = document.createElementNS(svgNS, 'circle');
     el.setAttribute('r', 2.2 * scale);
-    el.setAttribute('fill', model ? MODELS[model] : sk ? SHARED[sk] : DEPTS[dept].chip);
+    el.setAttribute('fill', sk ? SHARED[sk] : DEPTS[dept].chip);
     el.setAttribute('opacity', '0');
     svg.appendChild(el);
-    wirePulses.push({ dept, el, reverse, shared: sk, model, t0: performance.now() + delay, dur: 1400 });
+    wirePulses.push({ dept, el, reverse, shared: sk, t0: performance.now() + delay, dur: 1400 });
   }
   let stripDept = undefined;
   function tickWires(now, dt, wireA, focused) {
@@ -445,24 +386,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
         g.dot.setAttribute('opacity', (f ? 0.85 : 0.45) * wireA);
       }
     }
-    // model wiring: Claude + ChatGPT logos → the Brain's back edge; they pulse on their own
-    for (const [k, m] of Object.entries(mwires)) {
-      if (!modelImgs[k]) continue;
-      const r = modelImgs[k].getBoundingClientRect();
-      const mx = (r.left + r.right) / 2, msy = 50;
-      v3.set(m.port[0], m.port[1], m.port[2]).project(cam);
-      const ex = (v3.x * 0.5 + 0.5) * innerWidth, ey = (-v3.y * 0.5 + 0.5) * innerHeight;
-      m.path.setAttribute('d', `M ${mx} ${msy} C ${mx} ${msy + (ey - msy) * 0.45}, ${ex + 40} ${ey - (ey - msy) * 0.35}, ${ex} ${ey}`);
-      m.offset = (m.offset || 0) - dt * (f ? 13 : 6);
-      m.path.setAttribute('stroke-dashoffset', m.offset);
-      m.path.setAttribute('stroke-opacity', (f ? 0.45 : 0.22) * wireA);
-      m.dot.setAttribute('cx', ex); m.dot.setAttribute('cy', ey);
-      m.dot.setAttribute('opacity', (f ? 0.85 : 0.45) * wireA);
-    }
-    if (now > nextModelPulse) {
-      modelPulse(Math.random() < 0.6 ? 'claude' : 'chatgpt');
-      nextModelPulse = now + 2400 + Math.random() * 3200;
-    }
+    // ── RAY EDITION: the model-layer wires to the Brain are gone with the layer.
     for (let i = wirePulses.length - 1; i >= 0; i--) {
       const p = wirePulses[i];
       const k = (now - p.t0) / p.dur;
@@ -604,7 +528,6 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     const r = R[agentId]; if (!r || !Array.isArray(keys)) return;
     keys.forEach((key, i) => setTimeout(() => {
       const t = performance.now();
-      if (key === 'web') { modelPulse('claude', true); return; }
       const item = byDeptKey[r.a.dept + ':' + key] || items.find(it => it.key === key);
       if (!item) return;
       pulse(item, t, 0.3);
@@ -752,5 +675,8 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     }
     if (mwires.chatgpt) { mwires.chatgpt.path.setAttribute('stroke', ink); mwires.chatgpt.dot.setAttribute('fill', ink); }
   }
+  // RAY EDITION: the usage gauge is gone (no model integration on the phone build) —
+  // setUsage stays as a no-op so older callers don't break.
+  function setUsage() {}
   return { tick, sprites: [], onAgentEvent, onToolsUsed, showTip, startReveal, setDark, setUsage, live: LIVE, keys: uniqKeys }; // sprites: none clickable — docks retired
 }

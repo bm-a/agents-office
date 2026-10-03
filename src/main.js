@@ -16,6 +16,36 @@ import { initBrain } from './brain.js';
 import { initHero, HERO } from './hero.js';
 if (HERO) document.body.classList.add('hero'); // the website hero: no Sahni.ai mark or licence line on top of the page that already carries them // sahni.ai/custom hero mode (16 Sep 2026): opt-in via window.HERO, no-op otherwise
 let tasks = null; // V3 task boards — initialised after the rail constants exist
+// DESKTOP / MOBILE mode — the 3D UI's explicit layout switch (the top-bar segmented
+// control). Precedence: ?desktop=1 / ?mobile=1 in the URL, then the saved choice in
+// localStorage, then the viewport width. The mode flips body.mob, which is what all the
+// mobile-edition CSS keys off — so the toggle works at ANY viewport, not just ≤480px.
+// Every MOBILE-gated branch below follows this one constant.
+// MOBILE EDITION: portrait phones get the touch-first layout (bottom sheets, one Tasks
+// button, no floating cards). Desktop behaviour is untouched — every branch below is MOBILE-gated.
+const _modeQ = new URLSearchParams(location.search);
+const _modeParam = _modeQ.get('desktop') === '1' ? 'desktop' : _modeQ.get('mobile') === '1' ? 'mobile' : null;
+if (_modeParam) { try { localStorage.setItem('rayOffice.mode', _modeParam); } catch {} } // an explicit URL choice is a choice — persist it
+const _modeSaved = (() => { try { return localStorage.getItem('rayOffice.mode'); } catch { return null; } })();
+const OFFICE_MODE = _modeParam || (_modeSaved === 'desktop' || _modeSaved === 'mobile' ? _modeSaved
+  : (typeof matchMedia === 'function' && matchMedia('(max-width: 480px)').matches ? 'mobile' : 'desktop'));
+const MOBILE = OFFICE_MODE === 'mobile';
+if (MOBILE) document.body.classList.add('mob');
+function setOfficeMode(mode) { // the top-bar toggle: persist, drop any URL override, reload into the mode
+  if (mode !== 'desktop' && mode !== 'mobile') return;
+  try { localStorage.setItem('rayOffice.mode', mode); } catch {}
+  const u = new URL(location.href);
+  u.searchParams.delete('desktop'); u.searchParams.delete('mobile');
+  if (u.toString() !== location.href) location.href = u.toString();
+  else location.reload(); // nothing to strip — the URL is already bare, so force the reboot
+}
+{ // the segmented control mirrors the live mode; tapping the other side persists + reloads
+  const mt = document.getElementById('modeToggle');
+  if (mt) mt.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('on', b.dataset.m === OFFICE_MODE);
+    b.addEventListener('click', () => { if (b.dataset.m !== OFFICE_MODE) setOfficeMode(b.dataset.m); });
+  });
+}
 
 /* ---------- renderer / scene / camera ---------- */
 const canvas = document.getElementById('scene');
@@ -123,6 +153,7 @@ scene.add(ground);
 /* ---------- build the office ---------- */
 const hud = document.getElementById('hud');
 const clickTargets = [];   // plinth meshes -> dept key
+const infoTargets = [];   // desks, screens, walkways, plants -> object info card
 const personTargets = [];  // person meshes -> agent id
 const R = {};              // runtime per agent
 const deptRT = {};         // runtime per dept
@@ -149,6 +180,7 @@ let brain;
   const bg = deptRT.brain.group;
   brain = initBrain({ scene, brainGroup: bg, getR: () => R, esc: (t) => esc(t), hud, toScreen: (p) => toScreen(p), getCamera: () => camera });
   const plant = makePlant(); plant.position.set(6.2, 0.12, -5.8); bg.add(plant);
+  plant.traverse(o => { if (o.isMesh) { o.userData.obj = { kind: 'plant', dept: 'brain' }; infoTargets.push(o); } });
 }
 
 /* the thinking sweep (M4, D): a soft comet orbits the brain; as it passes each dept's
@@ -188,6 +220,7 @@ for (const k of DEPT_KEYS) {
   const to = [sx * 6.5, sz * 6.5];
   const walk = makeWalkway(from, to);
   walk.userData.dept = k; walk.userData.part = 'walkway';
+  walk.userData.obj = { kind: 'walkway', dept: k }; infoTargets.push(walk); // the uplink is clickable
   scene.add(walk);
   deptRT[k].gate = new THREE.Vector3(from[0], 0, from[1]);
   deptRT[k].brainGate = new THREE.Vector3(to[0], 0, to[1]);
@@ -225,6 +258,10 @@ for (const a of AGENTS) {
   chair.position.set(0, 0, 1.75);
   station.add(chair);
   station.traverse(o => { if (o.isMesh) o.userData.dept = a.dept; }); // focus-dim tagging
+  // everything clickable: desk + chair open the agent's desk card, the monitor the live-session card
+  desk.traverse(o => { if (o.isMesh) { o.userData.obj = { kind: 'desk', agentId: a.id }; infoTargets.push(o); } });
+  chair.traverse(o => { if (o.isMesh) { o.userData.obj = { kind: 'desk', agentId: a.id }; infoTargets.push(o); } });
+  for (const n of ['screen', 'monBack']) { const m = desk.getObjectByName(n); if (m) m.userData.obj = { kind: 'screen', agentId: a.id }; }
   scene.add(station);
 
   const person = makePerson({ hair: a.hair, skin: a.skin, chip: dept.chip, lead: a.lead });
@@ -279,7 +316,7 @@ for (const k of ['emails', 'sales', 'marketing', 'ops', 'delivery']) {
   const sx = Math.sign(L.pos[0]), sz = Math.sign(L.pos[1]);
   const p = makePlant();
   p.position.set(L.pos[0] + sx * (L.w / 2 - 1.6), 0.12, L.pos[1] + sz * (L.d / 2 - 1.6));
-  p.traverse(o => { if (o.isMesh) o.userData.dept = k; });
+  p.traverse(o => { if (o.isMesh) { o.userData.dept = k; o.userData.obj = { kind: 'plant', dept: k }; infoTargets.push(o); } });
   scene.add(p);
 }
 
@@ -323,26 +360,26 @@ const kv = id => KPIS.find(k => k.id === id).val;
 let brainNotes = brain.state.notes;
 const BB_ROWS = profileRows() || {
   emails: [
-    ['EMAILS SENT', () => STATS.emailsSent],
-    ['REPLIES DRAFTED', () => STATS.drafts]],
+    ['SIGNALS SCANNED', () => STATS.signals],
+    ['FILINGS RE-READ', () => STATS.signals]],
   delivery: [
-    ['REPORTS SENT', () => STATS.reports],
-    ['ON TRACK', () => STATS.onTrack + ' / ' + STATS.projects]],
+    ['BUILDS SHIPPED', () => STATS.builds],
+    ['TESTS GREEN', () => STATS.builds]],
   sales: [
-    ['CALLS S·A·J', () => STATS.spencer + '·' + STATS.arwin + '·' + STATS.jack],
-    ['NEW MANAGERS', () => STATS.managers],
-    ['AUTO-ONBOARDED', () => STATS.autoOnb]],
+    ['NOTES FILED', () => STATS.notes],
+    ['LINKS RESOLVED', () => STATS.notes]],
   marketing: [
-    ['NEW INSIGHTS', () => STATS.insMkt],
-    ['COST PER USER', () => '$' + Math.round(STATS.cpa)]],
+    ['MSGS RELAYED', () => STATS.msgs],
+    ['WATCHDOGS OK', () => STATS.msgs]],
   ops: [
-    ['PROPOSALS MADE', () => Math.round(kv('proposals'))],
-    ['NEW INSIGHTS', () => STATS.insOps]],
+    ['TASKS ROUTED', () => STATS.routed],
+    ['CRONS ARMED', () => STATS.routed]],
   fin: [
-    ['INVOICES ISSUED', () => Math.round(kv('invoices'))],
-    ['BILLS PAID', () => STATS.billsPaid]],
+    ['SLEEVE RUPEES', () => '₹5,000'],
+    ['LEAVE CUTS ₹', () => '₹1,600']],
   brain: [
-    ['NOTES INDEXED', () => brainNotes.toLocaleString('en-NZ')]],
+    ['NOTES FILED', () => brain ? brain.state.notes.toLocaleString('en-NZ') : '—'],
+    ['LINKS RESOLVED', () => brain ? brain.links.length.toLocaleString('en-NZ') : '—']],
 };
 if (PROFILE && !BB_ROWS.brain) BB_ROWS.brain = [['NOTES INDEXED', () => brainNotes.toLocaleString('en-NZ')]];
 for (const k of [...DEPT_KEYS, 'brain']) {
@@ -364,7 +401,7 @@ for (const k of [...DEPT_KEYS, 'brain']) {
   });
   if (k === 'brain') { // V3.6: a small tag names the etched floor and opens the graph (the big card stays retired)
     b.className = 'badge brainTag';
-    b.innerHTML = `<div class="b-name"><span class="dot" style="background:${dept.chip}"></span>THE BRAIN<b>${brain.state.notes.toLocaleString('en-NZ')}</b>NOTES</div>`;
+    b.innerHTML = `<div class="b-name"><span class="dot" style="background:${dept.chip}"></span>THE BRAIN<b>${brain.state.notes.toLocaleString('en-NZ')}</b>NOTES<b>${brain.links.length.toLocaleString('en-NZ')}</b>LINKS</div>`;
     b.onclick = (e) => { e.stopPropagation(); brain.open(); };
     b.title = 'open the Brain (G)';
   }
@@ -393,6 +430,14 @@ for (const k of [...DEPT_KEYS, 'brain']) {
   if (k === 'fin') deptRT[k].sideBadge = true;
   if (k === 'ops') { deptRT[k].sideBadge = true; deptRT[k].sideLeft = true; }
 }
+/* the Brain tag reports the real vault counts (notes filed, links resolved) — refreshed
+   whenever the live graph lands, so the baked demo number can never go stale on screen */
+function refreshBrainTag() {
+  const b = deptRT.brain && deptRT.brain.badge;
+  if (!b || !brain) return;
+  b.innerHTML = `<div class="b-name"><span class="dot" style="background:${DEPTS.brain.chip}"></span>THE BRAIN<b>${brain.state.notes.toLocaleString('en-NZ')}</b>NOTES<b>${brain.links.length.toLocaleString('en-NZ')}</b>LINKS</div>`;
+}
+{ const _sg = brain.setGraph.bind(brain); brain.setGraph = (g) => { _sg(g); refreshBrainTag(); }; }
 function updateBillboards() {
   for (const k of Object.keys(BB_ROWS)) {
     BB_ROWS[k].forEach((row, i) => {
@@ -458,10 +503,35 @@ addEventListener('wheel', (e) => {
 }, { passive: false });
 
 let drag = null;
+const _pts = new Map(); // active pointers, for two-finger pinch zoom
+let _pinchD = 0, _pinched = false;
 canvas.addEventListener('pointerdown', (e) => {
-  drag = { x: e.clientX, y: e.clientY, moved: false };
+  _pts.set(e.pointerId, [e.clientX, e.clientY]);
+  if (_pts.size === 2) { // pinch starts: kill the pan, remember the span
+    const p = [..._pts.values()];
+    _pinchD = Math.hypot(p[0][0] - p[1][0], p[0][1] - p[1][1]);
+    _pinched = true; drag = null;
+  } else if (_pts.size === 1) {
+    drag = { x: e.clientX, y: e.clientY, moved: false };
+  }
 });
 addEventListener('pointermove', (e) => {
+  if (_pts.has(e.pointerId)) _pts.set(e.pointerId, [e.clientX, e.clientY]);
+  if (_pts.size === 2) { // pinch zoom around the view target
+    const p = [..._pts.values()];
+    const d = Math.hypot(p[0][0] - p[1][0], p[0][1] - p[1][1]);
+    if (_pinchD > 0 && d > 0) {
+      tween = null;
+      view.zoom = clamp(view.zoom * d / _pinchD, 0.72, 5.2);
+      applyCamera();
+      if (view.zoom < 1.6 && focused) {
+        if (focused === 'brain') focused = null; else exitFocus(false);
+      }
+      syncOverviewBtn();
+    }
+    _pinchD = d;
+    return;
+  }
   if (!drag) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
@@ -473,10 +543,14 @@ addEventListener('pointermove', (e) => {
     drag.x = e.clientX; drag.y = e.clientY;
   }
 });
-addEventListener('pointerup', (e) => {
+function endPointer(e) {
+  _pts.delete(e.pointerId);
+  if (_pts.size < 2) _pinchD = 0;
   const wasDrag = drag && drag.moved;
+  const wasPinch = _pinched;
   drag = null;
-  if (wasDrag) return;
+  if (_pts.size === 0) _pinched = false;
+  if (_pts.size > 0 || wasPinch || wasDrag) return; // a finger is still down, or this was a gesture — no click
   if (e.target !== canvas) return; // HTML chrome handles its own clicks
   const nx = (e.clientX / innerWidth) * 2 - 1, ny = -(e.clientY / innerHeight) * 2 + 1;
   ray.setFromCamera(new THREE.Vector2(nx, ny), camera);
@@ -491,16 +565,23 @@ addEventListener('pointerup', (e) => {
     openAgent(pHits[0].object.userData.agentId, 'chat');
     return;
   }
+  const iHits = ray.intersectObjects(infoTargets, false);
+  if (iHits.length) { // desk / screen / walkway / plant -> the object info card
+    openObjPanel(iHits[0].object.userData.obj);
+    return;
+  }
   const hits = ray.intersectObjects(clickTargets, false);
   if (hits.length) {
     const dk = hits[0].object.userData.dept;
     if (dk === 'brain') { brain.open(); return; } // V3.6: the Brain opens as the graph
     if (dk !== focused) enterFocus(dk);
   }
-});
+}
+addEventListener('pointerup', endPointer);
+addEventListener('pointercancel', endPointer);
 addEventListener('keydown', (e) => {
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; // typing in the bar, the big editor or a menu never fires a hotkey
-  if (e.key === 'Escape') { if (tasks && tasks.calendar && tasks.calendar.isOpen()) { if (tasks.calendar.popOpen()) tasks.calendar.closePop(); else tasks.calendar.close(); } else if (brain.isOpen()) brain.close(); else if (tasks && tasks.isOpen()) tasks.close(); else zoomOut(); }
+  if (e.key === 'Escape') { if (objOpen) closeObjPanel(); else if (tasks && tasks.calendar && tasks.calendar.isOpen()) { if (tasks.calendar.popOpen()) tasks.calendar.closePop(); else tasks.calendar.close(); } else if (brain.isOpen()) brain.close(); else if (tasks && tasks.isOpen()) tasks.close(); else if (MOBILE && (document.body.classList.contains('tp-open') || document.body.classList.contains('ds-open') || document.body.classList.contains('rail-open'))) closeMobileSheets(); else zoomOut(); }
   else if (e.key === 'p' || e.key === 'P') { if (tasks && tasks.calendar) tasks.calendar.toggle(); } // V3.2.1 (16 Sep 2026): the calendar
   else if (tasks && tasks.calendar && tasks.calendar.isOpen()) return; // the calendar has its own keys (← → W M T)
   else if (e.key === 'g' || e.key === 'G') brain.toggle(); // V3.6: the full-screen Brain graph
@@ -613,6 +694,7 @@ function renderChat(id) {
   mMsgs.innerHTML = chatHist[id].map((m, i) => {
     if (m.who === 'agent') return `<div class="m-agent">${esc(m.text)}</div>`;
     if (m.who === 'user') return `<div class="m-user">${esc(m.text)}</div>`;
+    if (m.who === 'ray') return `<div class="m-ray"><span class="m-ray-n">RAY</span>${esc(m.text)}</div>`;
     if (m.who === 'work') return `<div class="m-work"><span class="wi">${m.i || '▸'}</span>${esc(m.text)}</div>`;
     if (m.who === 'file') return `
       <div class="m-file" data-i="${i}">
@@ -638,6 +720,43 @@ function renderChat(id) {
     el.addEventListener('click', () => resolveApproval(id, false)));
   mMsgs.scrollTop = mMsgs.scrollHeight;
 }
+/* ---------- two-way office chat relay (Discord-like, honest latency) ---------- */
+// His sent messages persist locally (the inbox is write-only); Ray's replies arrive
+// via GET /api/replies every 30s. The panel merges both into one permanent thread.
+let REPLIES = [];
+let SENT = [];
+try { SENT = JSON.parse(localStorage.getItem('rayChatSent') || '[]'); } catch { SENT = []; }
+const saveSent = () => { try { localStorage.setItem('rayChatSent', JSON.stringify(SENT.slice(-200))); } catch {} };
+function syncLiveThread(id) {
+  if (!tasks || !tasks.isLive()) return;
+  ensureChat(id);
+  const head = chatHist[id].slice(0, 2);
+  const tail = chatHist[id].slice(2).filter(m => m.transient);
+  const thread = [
+    ...SENT.filter(x => x.agent === id).map(x => ({ ts: x.ts, who: 'user', text: x.text })),
+    ...REPLIES.filter(x => x.agent === id).map(x => ({ ts: x.ts, who: 'ray', text: x.text })),
+  ].sort((a, b) => a.ts - b.ts);
+  chatHist[id] = [...head, ...thread, ...tail];
+  const hint = document.getElementById('mHint');
+  if (hint) hint.hidden = false;
+  if (modalOpen === id && modalTab === 'chat') renderChat(id);
+}
+async function pollReplies() {
+  try {
+    const r = await fetch('/api/replies', { cache: 'no-store' });
+    if (!r.ok) return;
+    const j = await r.json();
+    const next = Array.isArray(j.replies) ? j.replies : [];
+    const sig = next.map(x => x.ts + ':' + String(x.text || '').length).join('|');
+    if (sig === pollReplies._sig) return;
+    pollReplies._sig = sig;
+    REPLIES = next;
+    if (modalOpen && tasks && tasks.isLive()) syncLiveThread(modalOpen);
+  } catch { /* offline — the thread simply waits */ }
+}
+const _replyTimer = setInterval(pollReplies, 30000);
+if (_replyTimer && typeof _replyTimer.unref === 'function') _replyTimer.unref(); // node-only: never hold the process open (smoke test)
+pollReplies();
 function renderActivity(id) {
   const r = R[id], v = r.v1;
   const task = rnd(v.tasks || ['Working through the queue'])
@@ -803,15 +922,150 @@ function railBack() { // V3.4: "back" = back to the pod view, chat stays on the 
   const t = focusTarget(focused);
   flyTo(t.pos, t.zoom, 500);
 }
-document.getElementById('railBack').addEventListener('click', railBack);
+document.getElementById('railBack').addEventListener('click', () => { if (MOBILE) closeMobileRail(); else railBack(); });
+// every panel gets a visible × — the rail's closes focus on desktop, the sheet on mobile
+document.getElementById('railX').addEventListener('click', () => { if (MOBILE) closeMobileRail(); else exitFocus(true); });
+document.getElementById('tpX').addEventListener('click', () => document.body.classList.remove('tp-open'));
 let pendingTab = 'chat';
 // compat entry point (person clicks, pills, CC export): route through focus mode
 function openAgent(id, tab = 'chat') {
+  if (MOBILE) { // on a phone the agent's card docks as a bottom sheet — no focus fly, no floating badges
+    closeDeptSheet();
+    document.body.classList.remove('tp-open');
+    rail.style.display = 'block';
+    rail.className = ''; // drop the left/right dock so the bottom-sheet rules apply
+    openAgentRail(id, tab, false);
+    requestAnimationFrame(() => requestAnimationFrame(() => rail.classList.add('open')));
+    document.body.classList.add('rail-open');
+    return;
+  }
   const dept = R[id].a.dept;
   if (focused === dept) { openAgentRail(id, tab); return; }
   pendingTab = tab;
   enterFocus(dept, id);
 }
+/* ---------- mobile edition: the single department sheet + sheet plumbing ---------- */
+function deptSheetHTML(k) {
+  const d = DEPTS[k];
+  const metrics = (BB_ROWS[k] || []).map(([lab, fn]) => {
+    let v; try { v = fn(); } catch (e) { v = '—'; }
+    return `<div class="ds-m"><span>${esc(lab)}</span><b>${esc(String(v))}</b></div>`;
+  }).join('');
+  const agents = AGENTS.filter(a => a.dept === k).map(a => {
+    const cur = tasks && (tasks.tasks.find(t => t.agent === a.id && t.state === 'doing') ||
+                          tasks.tasks.find(t => t.agent === a.id && (t.state === 'next' || t.state === 'waiting')));
+    return `<div class="ds-a"><span class="ds-dot" style="background:${d.chip}"></span>` +
+      `<span class="ds-an">${esc(a.name)}${a.lead ? ' ★' : ''}</span>` +
+      `<span class="ds-at">${esc(cur ? cur.title : '—')}</span></div>`;
+  }).join('');
+  return `<div class="ds-head"><span class="ds-dot" style="background:${d.chip}"></span>` +
+    `<span class="ds-name">${esc(d.name)}</span></div>` +
+    `<div class="ds-metrics">${metrics}</div><div class="ds-agents">${agents}</div>`;
+}
+function showDeptSheet(k) {
+  closeMobileRail();
+  document.body.classList.remove('tp-open');
+  document.getElementById('dsBody').innerHTML = deptSheetHTML(k);
+  document.body.classList.add('ds-open');
+}
+function closeDeptSheet() { document.body.classList.remove('ds-open'); }
+function closeMobileRail() {
+  document.body.classList.remove('rail-open');
+  rail.classList.remove('open', 'agentOpen');
+  modalOpen = null;
+  setTimeout(() => { if (!document.body.classList.contains('rail-open')) rail.style.display = 'none'; }, 450);
+}
+function closeMobileSheets() {
+  document.body.classList.remove('tp-open');
+  closeDeptSheet();
+  closeMobileRail();
+}
+/* ---------- object info card: every clickable 3D object describes itself ----------
+   Desks (+chairs) name their agent, monitors describe the live session, walkways the
+   dept↔Brain uplink, plants the ambience division. Bloomberg card, × + Esc to close. */
+const objPanel = document.getElementById('objPanel');
+const objBody = document.getElementById('objBody');
+let objOpen = false;
+function agentNow(id) {
+  const t = tasks && tasks.tasks.find(t => t.agent === id && t.state === 'doing');
+  if (t) return t.title;
+  const f = R[id] && R[id].feed[0];
+  return f ? `${f.i} ${f.text}` : 'Working through the queue';
+}
+function objHTML(o) {
+  if (o.kind === 'desk' || o.kind === 'screen') {
+    const r = R[o.agentId]; if (!r) return '';
+    const a = r.a, d = DEPTS[a.dept];
+    return `<div class="ob-k">${o.kind === 'screen' ? 'LIVE SESSION — MONITOR' : esc(d.name) + ' — DESK'}</div>
+      <div class="ob-t"><span class="dot" style="background:${d.chip}"></span>${a.lead ? '★ ' : ''}${esc(a.name)}</div>
+      <div class="ob-s">${esc(r.v1.role || '')}${r.v1.tagline ? ' — ' + esc(r.v1.tagline) : ''}</div>
+      <div class="ob-rows">
+        <div class="ob-r"><span class="k">NOW</span><span class="v">${esc(agentNow(a.id))}</span></div>
+        <div class="ob-r"><span class="k">DEPT</span><span class="v">${esc(d.name)}</span></div>
+      </div>
+      <div class="ob-act"><button data-act="chat" data-id="${a.id}">OPEN CHAT</button></div>`;
+  }
+  if (o.kind === 'walkway') {
+    const d = DEPTS[o.dept] || DEPTS.brain;
+    return `<div class="ob-k">UPLINK</div>
+      <div class="ob-t"><span class="dot" style="background:${d.chip}"></span>${esc(d.short)} ↔ THE BRAIN</div>
+      <div class="ob-s">The walkway carries this department's work to the Brain — filings, builds and notes flow both ways, every beat.</div>`;
+  }
+  if (o.kind === 'plant') {
+    return `<div class="ob-k">AMBIENCE</div>
+      <div class="ob-t"><span class="dot" style="background:#5ADEB7"></span>OFFICE PLANT</div>
+      <div class="ob-s">Photosynthesis division. Zero tasks, zero approvals, 100% uptime.</div>`;
+  }
+  return '';
+}
+function openObjPanel(o) {
+  const html = objHTML(o);
+  if (!html) return;
+  if (MOBILE) { closeDeptSheet(); closeMobileRail(); } // the card takes the stage on a phone
+  objBody.innerHTML = html;
+  objBody.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.act === 'chat') { closeObjPanel(); openAgent(b.dataset.id, 'chat'); }
+  }));
+  objPanel.classList.add('on');
+  objOpen = true;
+}
+function closeObjPanel() { objPanel.classList.remove('on'); objOpen = false; }
+document.getElementById('objX').addEventListener('click', closeObjPanel);
+function initMobileChrome() {
+  if (!MOBILE) return;
+  const toggleTasks = () => { closeDeptSheet(); closeMobileRail(); document.body.classList.toggle('tp-open'); };
+  document.getElementById('tpFab').addEventListener('click', toggleTasks);
+  document.getElementById('topTasks').addEventListener('click', toggleTasks);
+  document.getElementById('sheetScrim').addEventListener('click', closeMobileSheets);
+  document.getElementById('dsClose').addEventListener('click', closeMobileSheets);
+  // swipe down from a sheet's top edge dismisses it
+  for (const [id, close] of [['tpanel', () => document.body.classList.remove('tp-open')], ['deptSheet', closeDeptSheet]]) {
+    const el = document.getElementById(id);
+    let sy = null;
+    el.addEventListener('touchstart', (e) => {
+      const r = el.getBoundingClientRect();
+      if (e.touches[0].clientY - r.top < 72) sy = e.touches[0].clientY;
+    }, { passive: true });
+    el.addEventListener('touchmove', (e) => {
+      if (sy == null) return;
+      if (e.touches[0].clientY - sy > 90) { close(); sy = null; }
+    }, { passive: true });
+    el.addEventListener('touchend', () => { sy = null; }, { passive: true });
+  }
+  // the top-bar dot mirrors the server link (the desktop ticker is hidden on mobile)
+  initLiveDot();
+}
+if (MOBILE) initMobileChrome(); // the sheet buttons were wired but never switched on — they are now
+/* ---------- the LIVE dot: green while /api/health answers ok, grey when it doesn't ---------- */
+function initLiveDot() {
+  const dot = document.getElementById('liveDot');
+  if (!dot || dot.dataset.liveInit) return;
+  dot.dataset.liveInit = '1';
+  const ping = () => fetch('/api/health', { cache: 'no-store' }).then(r => r.json())
+    .then(h => dot.classList.toggle('on', !!(h && h.ok))).catch(() => dot.classList.remove('on'));
+  ping(); setInterval(ping, 30000);
+}
+initLiveDot(); // every viewport gets the dot, not just the mobile chrome
 function setTab(tab) {
   modalTab = tab;
   document.querySelectorAll('#rail .mtabs button').forEach(b =>
@@ -826,7 +1080,8 @@ function sendChat(text) {
   const id = modalOpen;
   if (!id || !text.trim()) return;
   const r = R[id];
-  chatPush(id, { who: 'user', text });
+  const liveMode = tasks && tasks.isLive();
+  if (!liveMode) chatPush(id, { who: 'user', text });
   document.getElementById('mIn').value = '';
   const low = text.toLowerCase();
   setTimeout(() => {
@@ -839,19 +1094,22 @@ function sendChat(text) {
     if (rv && tasks.revise(id, rv[1].trim())) { chatPush(id, { who: 'agent', text: 'On it — revising now. It will land here when it is ready.' }); return; }
     const tr = tasks && tasks.handleChat(id, text); // "add task: …" / "what's on the board"
     if (tr) { chatPush(id, { who: 'agent', text: tr }); return; }
-    if (tasks && tasks.isLive()) { // LIVE: a real conversation with the agent, grounded in the brain
-      chatPush(id, { who: 'work', i: '…', text: `${r.a.name} is thinking` });
-      fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ agent: id, text, history: chatHist[id].filter(m => m.who === 'user' || m.who === 'agent').slice(-8) }) })
+    if (tasks && tasks.isLive()) { // LIVE: the message relays to Ray's inbox — he reads it in the main chat and replies there
+      const w = { who: 'work', i: '…', text: `Sending to Ray`, transient: true };
+      chatPush(id, w);
+      const ts = Date.now();
+      fetch('/api/inbox', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ kind: 'chat', agent: id, text }) })
         .then(async res => { if (!res.ok) throw new Error((await res.json()).error || res.statusText); return res.json(); })
-        .then(j => {
-          const h = chatHist[id]; const k = h.findIndex(m => m.who === 'work' && m.text === `${r.a.name} is thinking`); if (k >= 0) h.splice(k, 1);
-          chatPush(id, { who: 'agent', text: j.reply });
-          if (j.routines && tasks.refresh) tasks.refresh(); // a routine was set, paused, run or deleted in chat
-          if (j.read) for (const n of j.read.slice(0, 2)) brain.readNote(id, n);
-          if (j.tools && j.tools.length) mcp.onToolsUsed(id, j.tools);
+        .then(() => {
+          const h = chatHist[id]; const k = h.indexOf(w); if (k >= 0) h.splice(k, 1);
+          SENT.push({ ts, agent: id, text }); saveSent();
+          syncLiveThread(id); // the message sits in the thread as sent — that's the truth until Ray replies
         })
-        .catch(e => chatPush(id, { who: 'agent', text: `I couldn't reach Claude (${e.message}).` }));
+        .catch(e => {
+          const h = chatHist[id]; const k = h.indexOf(w); if (k >= 0) h.splice(k, 1);
+          chatPush(id, { who: 'work', i: '!', text: `Couldn't reach Ray's inbox (${e.message}) — not sent.`, transient: true });
+        });
       return;
     }
     const hit = (r.v1.chat || []).find(c => c.k.some(k => low.includes(k)));
@@ -904,7 +1162,7 @@ function mockupFor(id) {
       <div class="ph-sub">connect rates nearly double 10:00–11:30am — across 40,000 dials</div>
       <div class="ph-ui"><span>♥ 2.4k</span><span>💬 118</span><span>↗ share</span></div></div>`;
     case 'ada': return `<div class="mk mk-ad">
-      <div class="ad-head"><div class="ad-av"></div><div><div class="ad-who">sahni.ai</div><div class="ad-sp">Sponsored</div></div></div>
+      <div class="ad-head"><div class="ad-av"></div><div><div class="ad-who">Ray</div><div class="ad-sp">Sponsored</div></div></div>
       <div class="ad-text">Cold call anxiety? Your first 5 dials decide your whole day…</div>
       <div class="ad-media" style="background:linear-gradient(135deg, ${chip}55, ${chip}22)">“the 10am rule — call when they answer”</div>
       <div class="ad-foot"><span class="ad-hl">Start your free trial</span><span class="ad-cta">SIGN UP</span></div>
@@ -1038,19 +1296,11 @@ function fireAgentEvent(seedTs) {
     if (ev.kpi) { const k = KPIS.find(x => x.id === ev.kpi.id); if (k) k.val += ev.kpi.n; }
     const d = r.a.dept, roll = Math.random();
     profileTickKpi(d, roll); // INDUSTRY PROFILE: the pod's first number ticks up
-    if (d === 'emails') { if (roll < 0.45) STATS.emailsSent++; else if (roll < 0.7) STATS.drafts++; }
-    else if (d === 'delivery' && roll < 0.2) STATS.reports++;
-    else if (d === 'sales') {
-      if (roll < 0.4) STATS[rnd(['spencer', 'arwin', 'jack'])]++;
-      else if (roll < 0.5) STATS.autoOnb++;
-      else if (roll < 0.56) STATS.managers++;
-    }
-    else if (d === 'marketing') {
-      if (roll < 0.18) STATS.insMkt++;
-      else if (roll < 0.5) STATS.cpa = Math.max(25, STATS.cpa + (Math.random() - 0.55) * 1.2);
-    }
-    else if (d === 'ops' && roll < 0.22) STATS.insOps++;
-    else if (d === 'fin' && roll < 0.3) STATS.billsPaid++;
+    if (d === 'emails' && roll < 0.5) STATS.signals++;
+    else if (d === 'delivery' && roll < 0.2) STATS.builds++;
+    else if (d === 'sales' && roll < 0.4) STATS.notes++;
+    else if (d === 'marketing' && roll < 0.4) STATS.msgs++;
+    else if (d === 'ops' && roll < 0.25) STATS.routed++;
     if (ev.brain || Math.random() < 0.12) { brainNotes++; brain.read(r.a.id); } // the Brain shows the read
     updateBillboards();
     if (modalOpen === r.a.id && modalTab === 'activity') renderActivity(r.a.id);
@@ -1370,7 +1620,7 @@ function applyRoster(agents) {
 tasks = initTasks({
   hud, R, deptRT, RAIL_SIDE, spawnEmote, chatPush, chatHist, feedPush, zoomToApproval, enterFocus, openAgent, esc,
   brainWrite: (id, title) => brain.write(id, title), brain,
-  onLive: (h) => { document.querySelector('#topbar .brand .ver').textContent = 'BETA'; document.title = `${h.name} — Agents Office`; brain.setOwner(h.name); brain.setQuiet(true); applyRoster(h.agents); },
+  onLive: (h) => { document.querySelector('#topbar .brand .ver').textContent = 'BETA'; document.title = h.name || "Ray's Office"; brain.setOwner(h.name); brain.setQuiet(true); applyRoster(h.agents); },
   onTools: (agentId, keys) => mcp.onToolsUsed(agentId, keys),
   requestApproval, setStuck: setStuckLive,
   onUsage: (u) => { if (mcp && mcp.setUsage) mcp.setUsage(u); }, // V3.6: the plan's gauge in the top bar
@@ -1401,28 +1651,52 @@ resize();
   // typing #dark=1 into an OPEN tab is a same-document hash change (no reload) — react to it live
   addEventListener('hashchange', () => { const d = new URLSearchParams(location.hash.slice(1)).get('dark'); if (d === '1') setDark(true); else if (d === '0') setDark(false); });
   if (h.get('board')) { // #board=1 → company board · #board=marketing → that dept's board
-    const b = h.get('board');
-    if (LAYOUT[b] && b !== 'brain') tasks.openFor(b); else tasks.open();
+    const b = h.get('board');    if (LAYOUT[b] && b !== 'brain') tasks.openFor(b); else tasks.open();
+  }
+  if (h.get('objinfo')) { // #objinfo=screen:piper | desk:forge | walkway:emails | plant:ops — deterministic shot of the object card
+    const [kind, ref] = h.get('objinfo').split(':');
+    const o = { kind };
+    if (kind === 'desk' || kind === 'screen') { o.agentId = ref; o.dept = R[ref] ? R[ref].a.dept : 'marketing'; }
+    else o.dept = DEPTS[ref] ? ref : 'marketing';
+    setTimeout(() => openObjPanel(o), 500);
   }
   syncOverviewBtn();
 }
 window.CC = { hero, flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes,
-  setCam, setDark, brain, connectorReveal: () => mcp.startReveal(performance.now()),
+  setCam, setDark, setOfficeMode, openObjPanel, closeObjPanel, toScreen, brain, connectorReveal: () => mcp.startReveal(performance.now()),
   toggleBoard: () => tasks.toggle(), addTask: (agentId, title) => tasks.addTask(agentId, title), tasks, routines: () => tasks.routines };
 
 let last = performance.now();
+// LOOP-HARDENING (Ray, 29 Sep 2026): every subsystem tick runs in its own
+// try/catch so one failing subsystem can NEVER kill the render loop again.
+// Caught errors go to console.error + the ?debug=1 on-screen overlay (first
+// few only, then quiet) and are counted on window.__rayLoop for diagnosis.
+const __tickErrs = {};
+function __guard(name, fn) {
+  try { fn(); }
+  catch (e) {
+    const n = (__tickErrs[name] = (__tickErrs[name] || 0) + 1);
+    if (n <= 3) {
+      console.error(`[loop:${name}]`, e);
+      if (window.__rayDbgLog) { try { window.__rayDbgLog('TICK', `${name}: ${(e && e.message) || e}`); } catch (_) {} }
+    }
+  }
+}
+let __frames = 0;
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  tickTween(now);
-  applyCamera();
-  tickDim(dt);
-  tickSim(now, dt);
-  if (hero) hero.tick(now, dt);
-  tickLOD();
-  tasks.tick(now);
-  mcp.tick(now, dt, view, camera, focused, focusDim);
-  syncOverviewBtn();
-  renderer.render(scene, camera);
+  __frames++;
+  __guard('tickTween', () => tickTween(now));
+  __guard('applyCamera', () => applyCamera());
+  __guard('tickDim', () => tickDim(dt));
+  __guard('tickSim', () => tickSim(now, dt));
+  if (hero) __guard('hero', () => hero.tick(now, dt));
+  __guard('tickLOD', () => tickLOD());
+  __guard('tasks', () => tasks.tick(now));
+  __guard('mcp', () => mcp.tick(now, dt, view, camera, focused, focusDim));
+  __guard('syncOverviewBtn', () => syncOverviewBtn());
+  __guard('render', () => renderer.render(scene, camera));
+  window.__rayLoop = { frames: __frames, tickErrs: __tickErrs, at: Date.now() };
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

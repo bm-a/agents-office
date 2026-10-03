@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0D0D0F">
+<title>Office · Ray ▮</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0D0D0F; --surf:#1F1F26; --elev:#2A2A34;
+  --tx:#FFFFFF; --mut:#C9C9D2; --faint:#A8A8B4;
+  --amber:#FFA028; --amber-dim:rgba(255,160,40,.38); --grn:#3DDC97; --red:#FF5C5C;
+  --line:rgba(255,255,255,0.15);
+  --sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:ui-monospace,'JetBrains Mono',SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:var(--sans);
+  font-size:15px;line-height:1.55;padding:0 0 48px}
+.num,.v,time,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+a{color:inherit}
+
+/* ---------- ticker header strip ---------- */
+.tickwrap{position:sticky;top:0;z-index:20;background:var(--bg);
+  border-bottom:1px solid var(--line);
+  background-image:linear-gradient(rgba(255,255,255,.028),rgba(255,255,255,0));}
+.navrow{display:flex;align-items:stretch;height:48px;padding:0 2px 0 12px}
+.brand{display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px;
+  letter-spacing:1px;color:var(--tx);margin-right:2px;white-space:nowrap}
+.navtabs{display:flex;align-items:stretch;margin-left:auto}
+.navtab{display:flex;align-items:center;padding:0 10px;min-height:48px;
+  color:var(--mut);text-decoration:none;font-size:10.5px;font-weight:700;
+  letter-spacing:1px;border-bottom:2px solid transparent;white-space:nowrap}
+.navtab.active{color:var(--amber);border-bottom-color:var(--amber);
+  text-shadow:0 0 18px rgba(255,160,40,.45)}
+.navtab:active{color:var(--tx)}
+.ticker{overflow:hidden;background:var(--surf);border-top:1px solid var(--line);
+  height:30px;display:flex;align-items:center}
+.tickertape{display:inline-flex;white-space:nowrap;will-change:transform;
+  animation:tick 30s linear infinite}
+.tickertape span{padding:0 20px;font-family:var(--mono);font-size:11px;
+  letter-spacing:.6px;color:var(--mut);font-variant-numeric:tabular-nums}
+.tickertape b{color:var(--tx);font-weight:600}
+@keyframes tick{to{transform:translateX(-50%)}}
+
+/* ---------- status hero ---------- */
+.status{padding:18px 16px 16px;border-bottom:1px solid var(--line);max-width:760px;margin:0 auto}
+.micro{font-size:10.5px;font-weight:700;letter-spacing:2.2px;color:var(--faint);
+  text-transform:uppercase}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}
+.v{font-size:20px;font-weight:700;color:var(--tx);white-space:nowrap;min-width:0;
+  display:flex;align-items:center;gap:6px}
+.v.amber{color:var(--amber)}
+.l{font-size:9.5px;letter-spacing:1.3px;color:var(--faint);text-transform:uppercase;
+  margin-top:4px;font-weight:600}
+.livedot{width:8px;height:8px;border-radius:50%;background:var(--grn);flex:none;
+  animation:blink 1.6s steps(2,start) infinite}
+.livedot.bad{background:var(--red)}
+@keyframes blink{to{visibility:hidden}}
+.srvtxt{font-size:11px;font-weight:700;letter-spacing:.4px;white-space:nowrap;overflow:hidden}
+.srvtxt.ok{color:var(--grn)} .srvtxt.bad{color:var(--red)}
+
+/* ---------- sections ---------- */
+main{max-width:760px;margin:0 auto;padding:4px 14px 0}
+.kicker{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;
+  letter-spacing:2px;color:var(--amber);text-transform:uppercase;margin:26px 0 10px}
+.kicker::after{content:'';flex:1;height:1px;background:var(--line)}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:6px;
+  padding:12px;margin-bottom:4px}
+
+/* ---------- chat ---------- */
+#msgs{display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow-y:auto;
+  padding:2px;margin-bottom:12px;-webkit-overflow-scrolling:touch}
+.msg{max-width:90%;padding:10px 12px;border-radius:4px;font-size:14.5px;
+  line-height:1.5;background:var(--elev);border:1px solid rgba(255,255,255,.05);
+  word-wrap:break-word;overflow-wrap:break-word}
+.msg .who{font-size:10px;font-weight:700;letter-spacing:1.6px;color:var(--faint);
+  margin-bottom:4px;display:flex;align-items:center;gap:6px;text-transform:uppercase}
+.msg time{display:block;font-size:10.5px;color:var(--faint);margin-top:5px}
+.msg.you{margin-left:auto}
+.msg.you .who{justify-content:flex-end;color:var(--faint)}
+.msg.ray{margin-right:auto}
+.msg.ray .who{color:var(--amber)}
+.chatbar{display:flex;gap:8px;align-items:flex-end}
+#ctext{flex:1;min-width:0;min-height:52px;max-height:150px;resize:vertical;font-size:16px;
+  font-family:inherit;color:var(--tx);background:var(--elev);
+  border:1px solid var(--line);border-radius:4px;padding:14px 12px}
+#ctext::placeholder{color:var(--faint)}
+#ctext:focus{outline:none;border-color:var(--amber)}
+#csend{min-height:52px;min-width:88px;padding:0 20px;font-size:15px;font-weight:800;
+  letter-spacing:1px;color:#0D0D0F;background:var(--amber);border:0;border-radius:4px;
+  cursor:pointer;font-family:inherit}
+#csend:disabled{opacity:.45}
+#csend:active{transform:scale(.97)}
+.chaterr{font-size:13px;color:var(--red);margin:8px 0 0;display:none}
+.chatnote{font-size:12px;color:var(--faint);margin:10px 0 0}
+.empty{color:var(--faint);font-size:13.5px;padding:8px 0}
+
+/* ---------- task / routine rows ---------- */
+.trow{display:flex;gap:2px;padding:6px 0;border-top:1px solid var(--line);align-items:flex-start}
+.trow:first-child{border-top:0}
+.trow .body{flex:1;min-width:0;padding:6px 0}
+.trow .t{font-weight:600;font-size:14px;color:var(--tx);line-height:1.4}
+.trow .d{font-size:12.5px;color:var(--mut);margin-top:3px;line-height:1.5}
+.trow .w{font-weight:600;color:var(--tx);white-space:nowrap;margin-left:10px;font-size:13px}
+.trow.done .t{color:var(--faint);text-decoration:line-through}
+.trow.done .d{color:var(--faint)}
+.chk{flex:none;width:48px;height:48px;margin:-4px 0 -4px -8px;display:flex;
+  align-items:center;justify-content:center;background:none;border:0;cursor:pointer;padding:0}
+.box{width:20px;height:20px;border:1.5px solid var(--faint);border-radius:4px;
+  display:flex;align-items:center;justify-content:center;flex:none}
+.chk[aria-pressed="true"] .box{background:var(--amber);border-color:var(--amber)}
+.chk:active .box{transform:scale(.92)}
+.pill{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.6px;
+  padding:4px 9px;border-radius:4px;background:var(--elev);border:1px solid var(--line);
+  color:var(--mut);margin-right:6px;margin-top:7px;white-space:nowrap;text-transform:uppercase}
+.pill.dim{color:var(--faint)}
+.rout-arrow{color:var(--faint);font-size:12px;margin-right:2px}
+
+/* ---------- crew ---------- */
+.crewgrid{display:grid;grid-template-columns:1fr;gap:8px}
+.crew{background:var(--surf);border:1px solid var(--line);border-radius:6px;
+  padding:11px 13px}
+.crew .n{font-weight:700;font-size:13.5px;color:var(--tx);letter-spacing:.3px}
+.crew .dept{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.4px;
+  color:var(--mut);margin-top:3px}
+.crew .does{font-size:12.5px;color:var(--mut);margin-top:4px;line-height:1.5}
+
+/* ---------- go links ---------- */
+.links{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.links a{display:flex;align-items:center;justify-content:center;min-height:56px;
+  background:var(--surf);border:1px solid var(--line);color:var(--tx);
+  font-weight:700;font-size:14px;text-decoration:none;border-radius:6px;
+  padding:10px;text-align:center}
+.links a:active{background:var(--elev)}
+.links a.hot{border-color:var(--amber);color:var(--amber);
+  box-shadow:0 0 22px rgba(255,160,40,.18), inset 0 0 14px rgba(255,160,40,.07)}
+.links a.hot small{color:var(--amber);opacity:.85}
+.links .view3d .go{display:inline-block;margin-left:6px;color:var(--amber);font-weight:800}
+.links .wide{grid-column:1/-1}
+.links .label small{display:block;font-size:10.5px;font-weight:600;color:var(--faint);
+  letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+
+.foot{margin:34px 0 0;padding:14px 4px calc(14px + env(safe-area-inset-bottom));
+  border-top:1px solid var(--line);color:var(--faint);font-size:11.5px;
+  line-height:2;font-family:var(--mono);letter-spacing:.4px}
+.foot .fr{display:flex;flex-wrap:wrap;gap:4px 14px;justify-content:space-between;align-items:baseline}
+.foot a{color:var(--mut)}
+.foot .bmark{color:var(--amber);font-weight:700}
+
+/* ---------- skeletons (dark shimmer, never spinners) ---------- */
+.skel{border-radius:4px;background:linear-gradient(90deg,var(--surf) 25%,var(--elev) 50%,var(--surf) 75%);
+  background-size:200% 100%;animation:sh 1.2s infinite linear}
+@keyframes sh{to{background-position:-200% 0}}
+.skel-line{height:56px;margin-bottom:8px}
+
+@media (min-width:640px){
+  .grid4 .v{font-size:24px}
+  .crewgrid{grid-template-columns:1fr 1fr}
+  .links{grid-template-columns:1fr 1fr 1fr}
+  .links .wide{grid-column:auto}
+  main{padding:4px 20px 0}
+  .status{padding:22px 20px 18px}
+}
+@media (prefers-reduced-motion:reduce){
+  .tickertape{animation:none}
+  .livedot{animation:none}
+}
+</style>
+</head>
+<body>
+
+<div class="tickwrap">
+  <div class="navrow">
+    <span class="brand">RAY <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#FFA028"/><path d="M10.2 15.4l-3.1-3.1 1.4-1.4 1.7 1.7 4.2-4.2 1.4 1.4z" fill="#0D0D0F"/></svg></span>
+    <nav class="navtabs" aria-label="Terminals">
+      <a class="navtab" href="/">FLAT</a>
+      <a class="navtab active" href="/office/" aria-current="page">OFFICE</a>
+      <a class="navtab" href="/brain/">BRAIN</a>
+      <a class="navtab" href="/trades/">TRADES</a>
+    </nav>
+  </div>
+  <div class="ticker" aria-hidden="true"><div class="tickertape" id="tape"><span>RAY ▮ OFFICE · LINKING…</span><span>RAY ▮ OFFICE · LINKING…</span></div></div>
+</div>
+
+<header class="status">
+  <div class="micro">Office // Mobile CMD</div>
+  <div class="grid4">
+    <div><div class="v amber num" id="hs-tasks">–</div><div class="l">Tasks open</div></div>
+    <div><div class="v num" id="hs-crew">–</div><div class="l">Crew</div></div>
+    <div><div class="v num" id="hs-notes">–</div><div class="l">Brain notes</div></div>
+    <div><div class="v" id="hs-server"><span class="livedot"></span><span class="srvtxt">…</span></div><div class="l">Server</div></div>
+  </div>
+</header>
+
+<main>
+  <div class="kicker">Inbox</div>
+  <section class="card" aria-label="Chat with Ray">
+    <div id="msgs" aria-live="polite"><div class="skel skel-line"></div></div>
+    <form id="chatform" class="chatbar" autocomplete="off">
+      <textarea id="ctext" rows="1" placeholder="Message Ray…" aria-label="Message Ray"></textarea>
+      <button id="csend" type="submit">SEND</button>
+    </form>
+    <p class="chaterr" id="chaterr" role="alert"></p>
+    <p class="chatnote">Ray picks up inbox messages — replies land here.</p>
+  </section>
+
+  <div class="kicker">Tasks</div>
+  <section class="card" aria-label="Tasks">
+    <div id="taskBody"><div class="skel skel-line"></div></div>
+  </section>
+
+  <div class="kicker">Routines · up next</div>
+  <section class="card" aria-label="Routines">
+    <div id="routBody"><div class="skel skel-line"></div></div>
+  </section>
+
+  <div class="kicker">Crew</div>
+  <div class="crewgrid" id="crewBody"><div class="skel skel-line"></div></div>
+
+  <div class="kicker">Terminals</div>
+  <div class="links">
+    <a class="hot" href="/trades/"><span class="label">TRADES<small>insider sleeve</small></span></a>
+    <a href="/brain/"><span class="label">BRAIN<small>notes vault</small></span></a>
+    <a href="/office/?desktop=1" class="wide hot view3d"><span class="label">3D VIEW<span class="go">▸</span><small>the full office · bloomberg floor</small></span></a>
+  </div>
+
+  <p class="foot"><span class="fr"><span class="bmark">RAY ▮ OFFICE</span><span>mobile cmd</span></span><span class="fr"><span><span id="footstamp"></span></span><span><a href="/api/health">api</a></span></span></p>
+</main>
+
+<script>
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+var esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+var fmtT = function(ts){ try{ return new Date(ts).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } };
+var getJSON = function(url){
+  return fetch(url, {cache:'no-store'}).then(function(r){
+    if(!r.ok) throw new Error('http '+r.status); return r.json(); });
+};
+var TICK = '<svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#FFA028"/><path d="M10.2 15.4l-3.1-3.1 1.4-1.4 1.7 1.7 4.2-4.2 1.4 1.4z" fill="#0D0D0F"/></svg>';
+var CHECK = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M9.5 15.6l-3.6-3.6L4.5 13.4l5 5 10-10-1.4-1.4z" fill="#0D0D0F"/></svg>';
+
+/* ---------- ticker tape (real stats only, never invented prices) ---------- */
+var tapeData = { tasks:null, routines:null, crew:null, notes:null, online:null };
+function renderTape(){
+  var t = tapeData;
+  var parts = [];
+  parts.push(t.online===null ? 'SRV <b>···</b>' : (t.online ? 'SRV <b>● ONLINE</b>' : 'SRV <b>● OFFLINE</b>'));
+  parts.push('TASKS <b>'+(t.tasks==null?'–':String(t.tasks).padStart(2,'0'))+' OPEN</b>');
+  parts.push('ROUTINES <b>'+(t.routines==null?'–':String(t.routines).padStart(2,'0'))+'</b>');
+  parts.push('CREW <b>'+(t.crew==null?'–':t.crew)+'</b>');
+  parts.push('BRAIN <b>'+(t.notes==null?'–':t.notes)+' NOTES</b>');
+  parts.push('RAY ▮ OFFICE');
+  var html = parts.map(function(p){ return '<span>'+p+'</span>'; }).join('');
+  $('tape').innerHTML = html + html; // duplicated for seamless loop
+}
+
+/* ---------- health: hero stats + crew ---------- */
+function loadHealth(){
+  getJSON('/api/health').then(function(h){
+    var agents = h.agents || [];
+    tapeData.online = true;
+    tapeData.crew = agents.length || null;
+    tapeData.notes = (h.notes!=null ? h.notes : null);
+    renderTape();
+    $('hs-server').innerHTML = '<span class="livedot"></span><span class="srvtxt ok">● ONLINE</span>';
+    $('hs-crew').textContent = agents.length || '–';
+    $('hs-notes').textContent = (h.notes!=null ? h.notes : '–');
+    $('footstamp').textContent = 'board: ' + (h.generated || 'unknown');
+    renderCrew(agents);
+  }).catch(function(){
+    tapeData.online = false; renderTape();
+    $('hs-server').innerHTML = '<span class="livedot bad"></span><span class="srvtxt bad">● OFFLINE</span>';
+    $('crewBody').innerHTML = '<div class="empty">Could not reach the office server.</div>';
+  });
+}
+function renderCrew(agents){
+  if(!agents.length){ $('crewBody').innerHTML = '<div class="empty">No crew data.</div>'; return; }
+  $('crewBody').innerHTML = agents.map(function(a){
+    return '<div class="crew"><div class="n">'+esc(a.name||a.id||'?')+
+      (a.lead ? ' · lead' : '') + '</div>'+
+      (a.dept?'<div class="dept">'+esc(a.dept)+'</div>':'')+
+      (a.does?'<div class="does">'+esc(a.does)+'</div>':'')+
+      '</div>';
+  }).join('');
+}
+
+/* ---------- tasks (done-toggle is local-only; server is display-only) ---------- */
+var DONEKEY = 'ray-mobile-done';
+var done = {};
+try{ done = JSON.parse(localStorage.getItem(DONEKEY)||'{}'); }catch(e){ done={}; }
+function saveDone(){ try{ localStorage.setItem(DONEKEY, JSON.stringify(done)); }catch(e){} }
+var taskKey = function(t){ return String(t.id!=null?t.id:(t.title||'')+'|'+(t.addedAt||'')); };
+function loadTasks(){
+  getJSON('/api/tasks').then(function(list){
+    if(!Array.isArray(list) || !list.length){
+      tapeData.tasks = 0; renderTape();
+      $('hs-tasks').textContent = '00';
+      $('taskBody').innerHTML = '<div class="empty">No tasks right now.</div>'; return; }
+    var items = list.slice(0,25);
+    var open = items.filter(function(t){ return !done[taskKey(t)]; }).length;
+    tapeData.tasks = open; renderTape();
+    $('hs-tasks').textContent = String(open).padStart(2,'0');
+    $('taskBody').innerHTML = items.map(function(t){
+      var title = t.title || '(untitled)';
+      var text = t.text || '';
+      // state text often repeats the title as a prefix ("Title — detail"); strip it
+      if(text && text !== title && text.indexOf(title) === 0)
+        text = text.slice(title.length).replace(/^[\s—–-]+/, '');
+      var showText = text && text !== title;
+      var isDone = !!done[taskKey(t)];
+      return '<div class="trow'+(isDone?' done':'')+'" data-k="'+esc(taskKey(t))+'">'+
+        '<button class="chk" type="button" aria-pressed="'+isDone+'" aria-label="Mark done"><span class="box">'+(isDone?CHECK:'')+'</span></button>'+
+        '<div class="body"><div class="t">'+esc(title)+'</div>'+
+        (showText ? '<div class="d">'+esc(text)+'</div>' : '')+
+        '<div>'+(t.state?'<span class="pill dim">'+esc(t.state)+'</span>':'')+
+        (t.agent?'<span class="pill">'+esc(t.agent)+'</span>':'')+
+        (t.addedAt?'<span class="pill dim num">'+esc(fmtT(t.addedAt))+'</span>':'')+'</div></div></div>';
+    }).join('');
+  }).catch(function(){
+    $('taskBody').innerHTML = '<div class="empty">Could not load tasks.</div>';
+  });
+}
+$('taskBody').addEventListener('click', function(e){
+  var b = e.target.closest ? e.target.closest('.chk') : null;
+  if(!b) return;
+  var row = b.closest('.trow'); if(!row) return;
+  var k = row.getAttribute('data-k');
+  var on = b.getAttribute('aria-pressed') !== 'true';
+  b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  b.querySelector('.box').innerHTML = on ? CHECK : '';
+  row.classList.toggle('done', on);
+  if(on) done[k]=1; else delete done[k];
+  saveDone();
+  var open = document.querySelectorAll('#taskBody .trow:not(.done)').length;
+  tapeData.tasks = open; renderTape();
+  $('hs-tasks').textContent = String(open).padStart(2,'0');
+});
+
+/* ---------- routines ---------- */
+function loadRoutines(){
+  getJSON('/api/routines').then(function(j){
+    var list = (j && j.routines) || [];
+    tapeData.routines = list.length; renderTape();
+    if(!list.length){ $('routBody').innerHTML = '<div class="empty">No routines scheduled.</div>'; return; }
+    $('routBody').innerHTML = list.slice(0,6).map(function(c){
+      return '<div class="trow"><div class="body"><div class="t"><span class="rout-arrow">▸</span> '+esc(c.title||c.id)+'</div>'+
+        (c.desc?'<div class="d">'+esc(c.desc)+'</div>':'')+'</div>'+
+        (c.when?'<span class="w num">'+esc(c.when)+'</span>':'')+'</div>';
+    }).join('');
+  }).catch(function(){
+    $('routBody').innerHTML = '<div class="empty">Could not load routines.</div>';
+  });
+}
+
+/* ---------- chat (endpoints unchanged) ---------- */
+var LSKEY = 'ray-mobile-sent';
+var sent = [];
+try{ sent = JSON.parse(localStorage.getItem(LSKEY)||'[]'); }catch(e){ sent=[]; }
+var replies = [];
+function saveSent(){ try{ localStorage.setItem(LSKEY, JSON.stringify(sent.slice(-100))); }catch(e){} }
+
+function renderChat(){
+  var items = [];
+  sent.forEach(function(m){ items.push({ts:m.ts, from:'you', text:m.text}); });
+  replies.forEach(function(r){
+    if(r && typeof r.text==='string')
+      items.push({ts:r.ts||0, from:'ray', text:r.text, agent:r.agent});
+  });
+  items.sort(function(a,b){ return a.ts-b.ts; });
+  var last = items.slice(-60);
+  if(!last.length){ $('msgs').innerHTML='<div class="empty">No messages yet — say hi.</div>'; return; }
+  $('msgs').innerHTML = last.map(function(m){
+    var who = m.from==='ray'
+      ? '<div class="who">Ray '+TICK+(m.agent?' · '+esc(m.agent):'')+'</div>'
+      : '<div class="who">You ›</div>';
+    return '<div class="msg '+m.from+'">'+who+esc(m.text)+
+      '<time>'+esc(fmtT(m.ts))+'</time></div>';
+  }).join('');
+  var box = $('msgs'); box.scrollTop = box.scrollHeight;
+}
+
+function pollReplies(){
+  getJSON('/api/replies').then(function(j){
+    var r = (j && j.replies) || [];
+    replies = r.filter(function(x){ return x && typeof x.text==='string'; });
+    renderChat();
+  }).catch(function(){ /* keep old messages on failure */ });
+}
+
+function showErr(msg){
+  var e = $('chaterr'); e.textContent = msg; e.style.display = msg? 'block':'none';
+}
+
+function sendMsg(){
+  var ta = $('ctext');
+  var text = ta.value.trim();
+  if(!text) return;
+  var btn = $('csend'); btn.disabled = true; showErr('');
+  fetch('/api/inbox', {
+    method:'POST',
+    headers:{'content-type':'application/json'},
+    body: JSON.stringify({text:text})
+  }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+  .then(function(res){
+    if(res.ok && res.j && res.j.ok){
+      sent.push({id:res.j.id, ts:Date.now(), text:text});
+      saveSent(); ta.value=''; renderChat();
+      setTimeout(pollReplies, 8000); // catch a quick reply
+    } else {
+      showErr((res.j && res.j.error) || 'Send failed — try again.');
+    }
+  }).catch(function(){ showErr('Network error — check your connection.'); })
+  .then(function(){ btn.disabled = false; ta.focus(); });
+  return false;
+}
+
+$('chatform').addEventListener('submit', function(e){ e.preventDefault(); sendMsg(); });
+
+/* ---------- boot ---------- */
+renderTape();
+renderChat();
+loadHealth(); loadTasks(); loadRoutines(); pollReplies();
+setInterval(loadHealth, 60000);
+setInterval(loadTasks, 60000);
+setInterval(loadRoutines, 60000);
+setInterval(pollReplies, 30000);
+})();
+</script>
+</body>
+</html>

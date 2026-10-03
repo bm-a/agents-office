@@ -17,58 +17,35 @@ export const TOKENS = {
 // V3.1 (5 Sep 2026, AJ): SUPPORT → EMAILS (same mint slot), new DELIVERY pod (sky) on the top axis.
 export const DEPT_KEYS = ['emails', 'sales', 'marketing', 'ops', 'fin', 'delivery'];
 export const DEPTS = {
-  emails:    { name: 'EMAILS',           short: 'EMAILS',  chip: '#5ADEB7', ink: '#1E9070', floor: '#E9F6EF' },
-  delivery:  { name: 'DELIVERY',         short: 'DELIVERY', chip: '#8FD3F4', ink: '#2E86AB', floor: '#E6F4FB' },
-  sales:     { name: 'SALES',            short: 'SALES',   chip: '#EADC8F', ink: '#A08A1E', floor: '#F6F1DA' },
-  marketing: { name: 'MARKETING',        short: 'MARKETING', chip: '#E69393', ink: '#C46060', floor: '#FAE9E7' },
-  fin:       { name: 'FINANCE',          short: 'FINANCE', chip: '#98A5EF', ink: '#5B66CE', floor: '#EAEDFA' },
-  ops:       { name: 'OPERATIONS',       short: 'OPERATIONS', chip: '#BFA2E3', ink: '#7449A9', floor: '#F2ECFA' },
+  emails:    { name: 'RADAR',            short: 'RADAR',   chip: '#5ADEB7', ink: '#1E9070', floor: '#E9F6EF' },
+  delivery:  { name: 'FORGE',            short: 'FORGE',   chip: '#8FD3F4', ink: '#2E86AB', floor: '#E6F4FB' },
+  sales:     { name: 'SCRIBE',           short: 'SCRIBE',  chip: '#EADC8F', ink: '#A08A1E', floor: '#F6F1DA' },
+  marketing: { name: 'RELAY',            short: 'RELAY',   chip: '#E69393', ink: '#C46060', floor: '#FAE9E7' },
+  fin:       { name: 'MONEY',            short: 'MONEY',   chip: '#98A5EF', ink: '#5B66CE', floor: '#EAEDFA' },
+  ops:       { name: 'COMMAND',          short: 'COMMAND', chip: '#BFA2E3', ink: '#7449A9', floor: '#F2ECFA' },
   brain:     { name: 'THE BRAIN',        short: 'THE BRAIN', chip: '#D1DECD', ink: '#4C7A57', floor: '#E9EFE4' },
 };
 
-// 35 agents (V3.4, 7 Sep 2026: every department has a lead). grid = [col,row] desk slot on the department plinth.
+// Ray's crew (13 desks, 6 pods). Dept keys kept stable; display names + roster are Bhavishya's.
 export const AGENTS = [
-  // EMAILS (5) — replaced Customer Support, 5 Sep 2026
-  { id: 'elead', name: 'EMAILS LEAD',         dept: 'emails',    lead: true,  grid: [0.5, 0], hair: '#2b2b2b', skin: '#E8B98E' },
-  { id: 'cmail', name: 'CLIENT EMAILS',       dept: 'emails',    grid: [0, 1], hair: '#3b2b1d', skin: '#F0C9A0' },
-  { id: 'imail', name: 'INTERNAL EMAILS',     dept: 'emails',    grid: [1, 1], hair: '#111111', skin: '#C68B59' },
-  { id: 'vmail', name: 'VENDOR EMAILS',       dept: 'emails',    grid: [0, 2], hair: '#7a3b12', skin: '#F5D5B0' },
-  { id: 'kmail', name: 'CONTRACTOR EMAILS',   dept: 'emails',    grid: [1, 2], hair: '#4a2a10', skin: '#D89F70' },
-  // SALES (6) — Sales Lead at the head; Proposals moved in from Operations, Outreach retired
-  { id: 'lexi',  name: 'SALES LEAD',          dept: 'sales',     lead: true,  grid: [0.5, 0], hair: '#5a2d0c', skin: '#F0C9A0' },
-  { id: 'enzo',  name: 'LEAD ENRICHER',       dept: 'sales',     grid: [0, 1], hair: '#1c1c2e', skin: '#E0A878' },
-  { id: 'ilm',   name: 'INBOUND LEADS MANAGER', dept: 'sales',   grid: [1, 1], hair: '#26140a', skin: '#F5D5B0' },
-  { id: 'pros',  name: 'PROSPECTOR',          dept: 'sales',     grid: [0, 2], hair: '#2a1a0e', skin: '#E8B98E' },
-  { id: 'piper', name: 'PROPOSALS',           dept: 'sales',     grid: [1, 2], hair: '#2d1a0a', skin: '#F0C9A0' },
-  { id: 'folo',  name: 'FOLLOW UPS',          dept: 'sales',     grid: [0.5, 3], hair: '#171717', skin: '#F5D5B0' },
-  // MARKETING (7) — Marketing Lead at the head since 7 Sep 2026
-  { id: 'mlead', name: 'MARKETING LEAD',      dept: 'marketing', lead: true,  grid: [0.5, 0], hair: '#2a1a0e', skin: '#E0A878' },
-  { id: 'riley', name: 'RESEARCH',            dept: 'marketing', grid: [0, 1], hair: '#8a4a1f', skin: '#F5D5B0' },
-  { id: 'newt',  name: 'NEWSLETTER',          dept: 'marketing', grid: [1, 1], hair: '#26140a', skin: '#D89F70' },
-  { id: 'gfx',   name: 'GRAPHICS DESIGNER',   dept: 'marketing', grid: [0, 2], hair: '#141414', skin: '#F0C9A0' },
-  { id: 'ada',   name: 'META ADS',            dept: 'marketing', grid: [1, 2], hair: '#3d2814', skin: '#C68B59' },
-  { id: 'iggy',  name: 'INSTAGRAM ORGANIC',   dept: 'marketing', grid: [0, 3], hair: '#552200', skin: '#E8B98E' },
-  { id: 'vid',   name: 'VIDEO EDITOR',        dept: 'marketing', grid: [1, 3], hair: '#1b1b24', skin: '#D9A97E' },
-  // OPERATIONS (6) — Operations Lead at the head since 7 Sep 2026; Internal Dashboards joins; Proposals moved to Sales
-  { id: 'olead', name: 'OPERATIONS LEAD',     dept: 'ops',       lead: true,  grid: [0.5, 0], hair: '#111111', skin: '#F0C9A0' },
-  { id: 'scout', name: 'INTEL',               dept: 'ops',       grid: [0, 1], hair: '#101820', skin: '#B07850' },
-  { id: 'legal', name: 'LEGAL REVIEW',        dept: 'ops',       grid: [1, 1], hair: '#20242e', skin: '#F0C9A0' },
-  { id: 'comply', name: 'COMPLIANCE CHECKER', dept: 'ops',       grid: [0, 2], hair: '#5a3a1a', skin: '#C68B59' },
-  { id: 'report', name: 'INTERNAL REPORTING', dept: 'ops',       grid: [1, 2], hair: '#2e2118', skin: '#E8B98E' },
-  { id: 'dash',  name: 'INTERNAL DASHBOARDS', dept: 'ops',       grid: [0.5, 3], hair: '#0d0d0d', skin: '#9C6B43' },
-  // FINANCE (4) — the accounting team; Accounting Lead at the head
-  { id: 'alead', name: 'ACCOUNTING LEAD',     dept: 'fin',       lead: true,  grid: [0.5, 0], hair: '#1f1f1f', skin: '#E0A878' },
-  { id: 'invo',  name: 'INVOICING',           dept: 'fin',       grid: [0, 1], hair: '#4a2a10', skin: '#F5D5B0' },
-  { id: 'apay',  name: 'ACCOUNTS PAYABLE',    dept: 'fin',       grid: [1, 1], hair: '#0a0a0a', skin: '#8A5A32' },
-  { id: 'recon', name: 'RECONCILIATION',      dept: 'fin',       grid: [0.5, 2], hair: '#33221a', skin: '#E8B98E' },
-  // DELIVERY (7) — new pod, 5 Sep 2026; Onboarder moved in from Sales
-  { id: 'dlead', name: 'DELIVERY LEAD',       dept: 'delivery',  lead: true,  grid: [0.5, 0], hair: '#1f1f1f', skin: '#F0C9A0' },
-  { id: 'pco',   name: 'PROJECT CO-ORDINATOR', dept: 'delivery', grid: [0, 1], hair: '#3d2814', skin: '#E8B98E' },
-  { id: 'qa',    name: 'QUALITY ASSURANCE CHECKER', dept: 'delivery', grid: [1, 1], hair: '#101820', skin: '#C68B59' },
-  { id: 'crep',  name: 'CLIENT REPORTS',      dept: 'delivery',  grid: [0, 2], hair: '#6b3410', skin: '#F5D5B0' },
-  { id: 'cass',  name: 'CLIENT ASSETS',       dept: 'delivery',  grid: [1, 2], hair: '#141414', skin: '#D9A97E' },
-  { id: 'dasst', name: 'DESIGNER ASSISTANT',  dept: 'delivery',  grid: [0, 3], hair: '#552200', skin: '#F0C9A0' },
-  { id: 'ona',   name: 'ONBOARDER',           dept: 'delivery',  grid: [1, 3], hair: '#0d0d0d', skin: '#9C6B43' },
+  // RADAR (2) — research & scans
+  { id: 'radar',    name: 'RADAR',      dept: 'emails',    lead: true,  grid: [0.5, 0], hair: '#2b2b2b', skin: '#E8B98E' },
+  { id: 'deepscan', name: 'DEEP SCAN',  dept: 'emails',                 grid: [0.5, 1], hair: '#3b2b1d', skin: '#F0C9A0' },
+  // FORGE (3) — builds: firmware, apps, bots
+  { id: 'forge',    name: 'FORGE',      dept: 'delivery',  lead: true,  grid: [0.5, 0], hair: '#5a2d0c', skin: '#F0C9A0' },
+  { id: 'firmware', name: 'FIRMWARE',   dept: 'delivery',               grid: [0, 1],   hair: '#1c1c2e', skin: '#E0A878' },
+  { id: 'apps',     name: 'APPS',       dept: 'delivery',               grid: [1, 1],   hair: '#26140a', skin: '#F5D5B0' },
+  // SCRIBE (2) — docs, memory, reports
+  { id: 'scribe',   name: 'SCRIBE',     dept: 'sales',     lead: true,  grid: [0.5, 0], hair: '#2a1a0e', skin: '#E0A878' },
+  { id: 'archive',  name: 'ARCHIVE',    dept: 'sales',                  grid: [0.5, 1], hair: '#141414', skin: '#F0C9A0' },
+  // RELAY (2) — messages & notifications
+  { id: 'relay',    name: 'RELAY',      dept: 'marketing', lead: true,  grid: [0.5, 0], hair: '#111111', skin: '#C68B59' },
+  { id: 'pager',    name: 'PAGER',      dept: 'marketing',              grid: [0.5, 1], hair: '#7a3b12', skin: '#F5D5B0' },
+  // COMMAND (1) — planning & coordination
+  { id: 'captain',  name: 'CAPTAIN',    dept: 'ops',       lead: true,  grid: [0.5, 0], hair: '#101820', skin: '#F0C9A0' },
+  // MONEY (2) — the owner + the watchdog
+  { id: 'bhavishya', name: 'BHAVISHYA', dept: 'fin',       lead: true,  grid: [0.5, 0], hair: '#0d0d0d', skin: '#9C6B43' },
+  { id: 'sentinel',  name: 'SENTINEL',  dept: 'fin',                    grid: [0.5, 1], hair: '#20242e', skin: '#D89F70' },
 ];
 
 // Plinth placement in world XZ. Brain central; departments well separated (AJ: not too close at zoom-out).
@@ -85,88 +62,72 @@ export const LAYOUT = {
 // Department billboard metrics (v1 rule #5: live metrics float above each dept,
 // values tick green on change, "Waiting Approval" pulses amber when > 0).
 export const BILLBOARDS = {
-  emails:    [{ id: 'emails',    label: 'EMAILS SENT',      val: 128 }],
-  delivery:  [{ id: 'reports',   label: 'REPORTS SENT',     val: 9 }],
-  sales:     [{ id: 'leads',     label: 'LEADS ENRICHED',   val: 47 },
-              { id: 'callhrs',   label: 'CALL HRS ROUTED',  val: 9.5, fmt: v => v.toFixed(1) + 'h', step: 0.4 }],
-  marketing: [{ id: 'adspend',   label: 'AD SPEND TODAY',   val: 684, fmt: v => '$' + Math.round(v).toLocaleString('en-NZ'), step: 12 }],
-  ops:       [{ id: 'proposals', label: 'PROPOSALS SENT',   val: 6 }],
-  fin:       [{ id: 'invoices',  label: 'INVOICES ISSUED', val: 23 }],
-  brain:     [{ id: 'notes',     label: 'NOTES INDEXED',    val: 1204, fmt: v => Math.round(v).toLocaleString('en-NZ') }],
+  emails:    [{ id: 'scans',    label: 'SIGNALS SCANNED', val: 128 }],
+  delivery:  [{ id: 'builds',   label: 'BUILDS SHIPPED',  val: 42 }],
+  sales:     [{ id: 'notes',    label: 'NOTES FILED',     val: 214 }],
+  marketing: [{ id: 'msgs',     label: 'MSGS RELAYED',    val: 512 }],
+  ops:       [{ id: 'routed',   label: 'TASKS ROUTED',    val: 96 }],
+  fin:       [{ id: 'sleeve',   label: 'SLEEVE RUPEES',   val: 5000, fmt: v => '₹' + Math.round(v).toLocaleString('en-IN'), step: 50 }],
+  brain:     [{ id: 'notes',    label: 'NOTES INDEXED',   val: 65, fmt: v => Math.round(v).toLocaleString('en-IN') }],
 };
 
-// Approval asks (agent requests → AJ decides; v1 flavour).
-// Per-agent first so the ask matches who's asking; dept pool is the fallback.
+// Approval asks (agent requests → Bhavishya decides).
 export const APPROVAL_ASKS = {
-  emails:    ['Send the price-increase notice to 120 clients — draft attached', 'Reply to the contractor dispute thread — draft attached'],
-  delivery:  ['Ship the September report pack to 14 clients', 'Release the brand assets to the client portal'],
-  sales:     ['Send re-engagement SMS to 214 cold leads', 'Move 8 enterprise leads to SPENCER’s queue'],
-  marketing: ['Launch 4 Meta ad variants — $120/day budget', 'Publish reel “cold call maths” to Instagram'],
-  ops:       ['Send proposal PDF to Ridgeline Property Group', 'Sign off the amended MSA for Kea Logistics — 2 clauses flagged'],
-  fin:       ['Invoice #218 doesn’t match the contract — hold for review?', 'Write off $180 of unmatched card fees'],
+  emails:    [],
+  delivery:  [],
+  sales:     [],
+  marketing: [],
+  ops:       ['A new strategy cleared the research bar — start paper-trading it?'],
+  fin:       ['Cover the missed ₹3,800 September SIPs manually in October?', 'SOTL touched ₹735 — confirm the fill in Groww before I log P&L'],
 };
 export const APPROVAL_BY_AGENT = {
-  cmail: 'Send the price-increase notice to 120 clients — draft attached',
-  vmail: 'Accept the vendor’s revised SLA — 2 changes flagged',
-  crep:  'Send the September report pack to 14 clients — 2 flagged for a call',
-  qa:    'Sign off the website handover — 2 minor issues noted',
-  dlead: 'Extend the Ridgeline project by a week — the client asked',
-  apay:  'Contractor invoice #218 is $350 over the contract rate — hold payment and query?',
-  piper: 'Send the Ridgeline Property Group proposal — 12 seats, Growth plan',
-  iggy:  'Publish reel “the 10am rule” to Instagram — script attached',
-  vid:   'Ship the 45-sec demo cut — captions burned in, v2 attached',
-  ada:   'Scale “cold call anxiety” creative to $180/day — CPA $29',
-  mlead: 'Approve the October content plan — 12 reels, 2 newsletters, 1 ad refresh',
-  olead: 'Sign off the Q4 operations checklist — 3 vendor renewals inside',
-  newt:  'Send the August newsletter to 3,400 subscribers — draft v3 attached',
-  scout: 'Green-light the CallForge comparison play — memo attached',
-  enzo:  'Buy 500 FullEnrich credits — current batch runs out tomorrow',
+  captain: 'A new strategy cleared the research bar — start paper-trading it?',
+  bhavishya: 'Cover the missed ₹3,800 September SIPs manually in October?',
+  sentinel: 'SOTL touched ₹735 — confirm the fill in Groww before I log P&L',
 };
 
-// Fake terminal lines for the desk screens (per-dept flavour), matching v1's chat voice.
+// Desk screen flavour lines — the crew's actual work.
 export const WORKLINES = {
   emails: [
-    '▸ drafting reply — client scope question',
-    '▸ vendor thread: SLA revision summarised',
-    '▸ 14 internal emails triaged · 3 for AJ',
-    '▸ contractor invoice query answered',
+    '▸ scanning BSE insider filings — 10-day window',
+    '▸ quant research: 2025 OOS still grinding',
+    '▸ promoter reshuffle check — SOTL flagged ✓',
+    '▸ 47 signals scored · 3 above the bar',
   ],
   delivery: [
-    '▸ client report: September pack 9/14',
-    '▸ QA pass: website handover · 2 notes',
-    '▸ asset library synced → client portal',
-    '▸ project plan: 3 milestones moved',
+    '▸ BMS tester v2.9.2 — tests 184/184 ✓',
+    '▸ 3D office board → phone :8082',
+    '▸ dashboard refresh — 15 min cron ✓',
+    '▸ Termux sshd + tor — tunnel up',
   ],
   sales: [
-    '▸ enriching lead — Summit HVAC',
-    '▸ routed 6 leads → ARWIN (4.2h queued)',
-    '▸ 32 prospects verified · 91% valid',
-    '▸ onboarding text sent — Bay Plumbing',
+    '▸ memory log — today\'s entries filed',
+    '▸ second brain — vault indexed',
+    '▸ report: contract note parsed ✓',
+    '▸ 214 notes · graph rebuilt',
   ],
   marketing: [
-    '▸ drafting reel hook v3 — "cold call maths"',
-    '▸ meta ads: 4 variants → review',
-    '▸ newsletter block 2/5 written',
-    '▸ brand-kit export: story + square',
-    '▸ rendering reel v2 — captions + b-roll',
+    '▸ WhatsApp relay — Bhavishya online',
+    '▸ Discord bridge — heartbeat fresh',
+    '▸ habit nudge — quiet until 18:00',
+    '▸ 512 messages relayed today',
   ],
   ops: [
-    '▸ proposal PDF built — Ridgeline Group',
-    '▸ competitor scan: DialAxis pricing page',
-    '▸ MSA clause 7.2 flagged — liability cap',
-    '▸ WorkSafe AU page changed · diffing',
-    '▸ weekly board pack: 4/6 sections done',
+    '▸ routing: 2 workers on the 3D office',
+    '▸ cron check — 14 jobs healthy',
+    '▸ SOTL fill check Wed 15:45 armed',
+    '▸ SIP mandate check Oct 6 armed',
   ],
   fin: [
-    '▸ reconciling 14 payments · 2 flagged',
-    '▸ invoice #218 vs contract — rate variance flagged',
-    '▸ invoice issued — Summit HVAC $840',
-    '▸ reminder 2/3 sent — Alpine Freight',
+    '▸ SOTL ×2 @ ₹702.90 — sell ₹735 live',
+    '▸ September leave cuts ≈ ₹1,600',
+    '▸ SIPs ₹3,800/mo → ICICI from Oct',
+    '▸ stipend lands Oct 10–15',
   ],
   brain: [
-    '▸ indexing vault — 1,204 notes',
-    '▸ answering INTEL query — churn cohort',
-    '▸ meeting scheduled: enzo × tess',
+    '▸ indexing vault — 65 notes',
+    '▸ answering RADAR query — reshuffle scan',
+    '▸ note linked: SOTL Trade Log ↔ Money',
   ],
 };
 

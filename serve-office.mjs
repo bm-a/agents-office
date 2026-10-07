@@ -4,6 +4,10 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+const execFileP = promisify(execFile);
 
 const ROOT = new URL('.', import.meta.url).pathname;
 const PORT = Number(process.env.PORT || 8082);
@@ -160,6 +164,26 @@ const __mc = new Map();
 const mcGet = (k, ttl) => { const e = __mc.get(k); return (e && Date.now() - e.t < ttl) ? e.v : undefined; };
 const mcSet = (k, v) => { __mc.set(k, { t: Date.now(), v }); if (__mc.size > 80) __mc.delete(__mc.keys().next().value); };
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+/* ---------- sentiment batch scoring via phone llama-server (Tor SSH, one call per batch) ---------- */
+const SENT_CACHE_TTL = 10 * 60 * 1000; // 10 min per headline text
+function scoreSentimentBatch(items) {
+  return new Promise((resolve) => {
+    const lines = items.map(o => JSON.stringify({ id: o.id, text: o.text })).join('\n') + '\n';
+    execFileP('ssh',
+      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=30', 'phone-tor',
+       'proot-distro', 'login', 'ubuntu', '--', 'python3', '/root/sentiment/scorer_llama.py'],
+      { input: lines, timeout: 240000, maxBuffer: 4 * 1024 * 1024 })
+      .then(({ stdout }) => {
+        const out = new Map();
+        for (const ln of String(stdout).split('\n')) {
+          const t = ln.trim(); if (!t) continue;
+          try { const o = JSON.parse(t); if (o && o.id !== undefined) out.set(String(o.id), o); } catch { /* skip */ }
+        }
+        resolve(out);
+      })
+      .catch(() => resolve(null));
+  });
+}
 async function fetchText(url, ms = 12000) {
   const ctl = new AbortController();
   const to = setTimeout(() => ctl.abort(), ms);
@@ -444,6 +468,38 @@ const server = http.createServer(async (req, res) => {
     if (!topics.length) return json(res, { ok: false, error: 'topics required' }, 400);
     const feeds = await Promise.all(topics.map(async t => ({ topic: t, items: await gnews(t).catch(() => []) })));
     return json(res, { ok: true, feeds });
+  }
+  if (p === '/api/sentiment' && req.method === 'POST') { // {"items":[{"id","text"}]} — batch financial sentiment via phone llama-server
+    const b = await readBody(req, 262144);
+    if (b === null) return json(res, { ok: false, error: 'body too large' }, 413);
+    const seen = new Set(), items = [];
+    for (const it of (Array.isArray(b.items) ? b.items : []).slice(0, 50)) {
+      const id = String((it && it.id) ?? '').slice(0, 128);
+      const text = String((it && it.text) ?? '').trim().slice(0, 2000);
+      if (!id || !text || seen.has(id)) continue;
+      seen.add(id); items.push({ id, text });
+    }
+    if (!items.length) return json(res, { ok: false, error: 'items required' }, 400);
+    const results = [], miss = [];
+    for (const it of items) {
+      const hit = mcGet('sent:v1:' + crypto.createHash('sha1').update(it.text).digest('hex'), SENT_CACHE_TTL);
+      if (hit) results.push({ id: it.id, label: hit.label, score: hit.score, cached: true });
+      else miss.push(it);
+    }
+    if (miss.length) {
+      const scored = await scoreSentimentBatch(miss);
+      if (scored === null) return json(res, { ok: false, error: 'scorer unreachable' }, 502);
+      for (const it of miss) {
+        const o = scored.get(it.id) || {};
+        const label = ['positive', 'neutral', 'negative'].includes(o.label) ? o.label : 'neutral';
+        const score = isFinite(+o.score) ? Math.max(0, Math.min(1, +o.score)) : 0;
+        mcSet('sent:v1:' + crypto.createHash('sha1').update(it.text).digest('hex'), { label, score });
+        results.push({ id: it.id, label, score });
+      }
+    }
+    const order = new Map(items.map((it, i) => [it.id, i]));
+    results.sort((a, b) => order.get(a.id) - order.get(b.id));
+    return json(res, { ok: true, results });
   }
 
   if (p === '/api/health') return json(res, health());

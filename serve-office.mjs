@@ -5,7 +5,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 const execFileP = promisify(execFile);
 
@@ -164,16 +164,43 @@ const __mc = new Map();
 const mcGet = (k, ttl) => { const e = __mc.get(k); return (e && Date.now() - e.t < ttl) ? e.v : undefined; };
 const mcSet = (k, v) => { __mc.set(k, { t: Date.now(), v }); if (__mc.size > 80) __mc.delete(__mc.keys().next().value); };
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
-/* ---------- sentiment batch scoring via phone llama-server (Tor SSH, one call per batch) ---------- */
+/* ---------- sentiment batch scoring via phone llama-server (SSH multiplexed over Tor) ---------- */
 const SENT_CACHE_TTL = 10 * 60 * 1000; // 10 min per headline text
+const SENT_SOCK = '/tmp/phone-sentiment.sock';
+const SENT_SSH_BASE = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=30', 'phone-tor'];
+const SENT_REMOTE = ['proot-distro', 'login', 'ubuntu', '--', 'python3', '/root/sentiment/scorer_llama.py'];
+// One persistent master: a single Tor handshake reused by every batch (cuts ~5-15s per batch).
+function sentMasterStart() {
+  try {
+    const m = spawn('ssh', ['-M', '-S', SENT_SOCK, '-o', 'ControlPersist=600', ...SENT_SSH_BASE, '-N'],
+      { stdio: 'ignore', detached: true });
+    m.unref();
+    m.on('error', () => {});
+    return m;
+  } catch { return null; }
+}
+let sentMaster = sentMasterStart();
+setInterval(() => { // refresh the master if it dropped
+  if (!sentMaster || sentMaster.exitCode !== null || sentMaster.signalCode) sentMaster = sentMasterStart();
+}, 30000);
+async function sshSentiment(input) {
+  const muxArgs = ['-S', SENT_SOCK, '-o', 'ControlMaster=no', '-o', 'ConnectTimeout=15', 'phone-tor', ...SENT_REMOTE];
+  try {
+    const { stdout } = await execFileP('ssh', muxArgs, { input, timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+    return stdout;
+  } catch (e) {
+    // socket dead or stale — make sure a master is (re)starting, then fall back to a fresh connection
+    if (!sentMaster || sentMaster.exitCode !== null || sentMaster.signalCode) sentMaster = sentMasterStart();
+    const { stdout } = await execFileP('ssh', [...SENT_SSH_BASE, ...SENT_REMOTE],
+      { input, timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+    return stdout;
+  }
+}
 function scoreSentimentBatch(items) {
   return new Promise((resolve) => {
     const lines = items.map(o => JSON.stringify({ id: o.id, text: o.text })).join('\n') + '\n';
-    execFileP('ssh',
-      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=30', 'phone-tor',
-       'proot-distro', 'login', 'ubuntu', '--', 'python3', '/root/sentiment/scorer_llama.py'],
-      { input: lines, timeout: 120000, maxBuffer: 4 * 1024 * 1024 })
-      .then(({ stdout }) => {
+    sshSentiment(lines)
+      .then((stdout) => {
         const out = new Map();
         for (const ln of String(stdout).split('\n')) {
           const t = ln.trim(); if (!t) continue;
@@ -181,7 +208,7 @@ function scoreSentimentBatch(items) {
         }
         resolve(out);
       })
-      .catch(() => resolve(null));
+      .catch((e) => { console.error('[sentiment] ssh failed:', e.code, (e.stderr || '').slice(0, 200), e.message.slice(0, 200)); resolve(null); });
   });
 }
 async function fetchText(url, ms = 12000) {

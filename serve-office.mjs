@@ -172,7 +172,7 @@ function scoreSentimentBatch(items) {
     execFileP('ssh',
       ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=30', 'phone-tor',
        'proot-distro', 'login', 'ubuntu', '--', 'python3', '/root/sentiment/scorer_llama.py'],
-      { input: lines, timeout: 120000, maxBuffer: 4 * 1024 * 1024 })
+      { input: lines, timeout: 240000, maxBuffer: 4 * 1024 * 1024 })
       .then(({ stdout }) => {
         const out = new Map();
         for (const ln of String(stdout).split('\n')) {

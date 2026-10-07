@@ -168,7 +168,6 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const SENT_CACHE_TTL = 10 * 60 * 1000; // 10 min per headline text
 const SENT_SOCK = '/tmp/phone-sentiment.sock';
 const SENT_SSH_BASE = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=30', 'phone-tor'];
-const SENT_REMOTE = ['proot-distro', 'login', 'ubuntu', '--', 'python3', '/root/sentiment/scorer_llama.py'];
 // One persistent master: a single Tor handshake reused by every batch (cuts ~5-15s per batch).
 function sentMasterStart() {
   try {
@@ -183,16 +182,21 @@ let sentMaster = sentMasterStart();
 setInterval(() => { // refresh the master if it dropped
   if (!sentMaster || sentMaster.exitCode !== null || sentMaster.signalCode) sentMaster = sentMasterStart();
 }, 30000);
-async function sshSentiment(input) {
-  const muxArgs = ['-S', SENT_SOCK, '-o', 'ControlMaster=no', '-o', 'ConnectTimeout=15', 'phone-tor', ...SENT_REMOTE];
+async function sshSentiment(lines) {
+  // NOTE: data travels base64-encoded in argv, not via stdin — piping stdin
+  // through ssh+ProxyCommand hangs when the parent's stdin is /dev/null.
+  const b64 = Buffer.from(lines).toString('base64');
+  const inner = 'printf "%s" "' + b64 + '" | base64 -d | python3 /root/sentiment/scorer_llama.py';
+  const remote = ['proot-distro', 'login', 'ubuntu', '--', 'bash', '-c', "'" + inner + "'"];
+  const muxArgs = ['-S', SENT_SOCK, '-o', 'ControlMaster=no', '-o', 'ConnectTimeout=15', 'phone-tor', ...remote];
   try {
-    const { stdout } = await execFileP('ssh', muxArgs, { input, timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+    const { stdout } = await execFileP('ssh', muxArgs, { timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
     return stdout;
   } catch (e) {
     // socket dead or stale — make sure a master is (re)starting, then fall back to a fresh connection
     if (!sentMaster || sentMaster.exitCode !== null || sentMaster.signalCode) sentMaster = sentMasterStart();
-    const { stdout } = await execFileP('ssh', [...SENT_SSH_BASE, ...SENT_REMOTE],
-      { input, timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+    const { stdout } = await execFileP('ssh', [...SENT_SSH_BASE, ...remote],
+      { timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
     return stdout;
   }
 }
